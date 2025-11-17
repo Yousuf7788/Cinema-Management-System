@@ -10,9 +10,35 @@ class ManagerDashboard(EmployeeDashboard):
     # Inherits everything from EmployeeDashboard but can have additional manager-only features
     
     def __init__(self, db, user_data):
+        # Let parent store user_data, set flags and call init_ui()
         super().__init__(db, user_data)
-        self.setWindowTitle(f"🎯 Cinema Management System - Manager Portal ({user_data['first_name']} {user_data['last_name']})")
-        self.add_manager_features()
+
+        # Defensive: ensure we actually have a dict
+        if not isinstance(user_data, dict):
+            print("ERROR: ManagerDashboard expected user_data dict but got:", repr(user_data), type(user_data))
+            return
+
+        # Store references consistently (keeps compatibility)
+        self.db = db
+        self.user_data = user_data
+        self.current_user = user_data
+
+        # Use .get to avoid KeyError if the key is missing
+        self.current_customer_id = user_data.get('customer_id')
+
+        # Set a safe window title (handles missing names)
+        first = user_data.get('first_name') or ''
+        last = user_data.get('last_name') or ''
+        title_name = (first + ' ' + last).strip()
+        if title_name:
+            self.setWindowTitle(f"🎯 Cinema Management System - Manager Portal ({title_name})")
+        else:
+            self.setWindowTitle("🎯 Cinema Management System - Manager Portal")
+
+        # Add manager-only UI pieces (do NOT call init_ui() again)
+        # ensure add_manager_features exists and is callable
+        if hasattr(self, 'add_manager_features') and callable(self.add_manager_features):
+            self.add_manager_features()
     
     def add_manager_features(self):
         """Add additional manager-only features"""

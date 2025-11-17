@@ -158,23 +158,33 @@ class LoginWindow(QWidget):
     def handle_login(self):
         username = self.username_input.text().strip()
         password = self.password_input.text().strip()
-        
         if not username or not password:
             self.show_error("Error", "Please enter both username and password")
             return
-        
-        # Show loading state
+
         self.login_btn.setText("Logging in...")
         self.login_btn.setEnabled(False)
-        
-        # Authenticate user
+
         user_data = self.db.authenticate_user(username, password)
-        if user_data:
-            self.login_successful.emit(user_data)
-        else:
-            self.show_error("Login Failed", "Invalid username or password")
+        print("DEBUG: authenticate_user returned:", repr(user_data), "type:", type(user_data))
+
+        if isinstance(user_data, dict):
             self.login_btn.setText("Login")
             self.login_btn.setEnabled(True)
+            print("DEBUG: auth_system about to emit login_successful with:", repr(user_data), "type:", type(user_data))
+            self.login_successful.emit(user_data)
+
+            return
+
+        # failure / unexpected
+        self.login_btn.setText("Login")
+        self.login_btn.setEnabled(True)
+        if user_data is None:
+            self.show_error("Login Failed", "Invalid username or password")
+        else:
+            print("WARNING: authenticate_user returned unexpected:", type(user_data), user_data)
+            self.show_error("Login Error", "An internal error occurred. Please try again.")
+
     
     def clear_fields(self):
         self.username_input.clear()
@@ -346,7 +356,9 @@ class SignupWindow(QWidget):
         success = self.db.create_user(username, password, email, 'customer', first_name, last_name, phone)
         if success:
             self.show_success("Account Created", "Your account has been created successfully! You can now login.")
+            print("DEBUG: auth_system about to emit signup_successful (no payload); signup returned success flag:", repr(success) if 'success' in locals() else None)
             self.signup_successful.emit()
+
         else:
             self.show_error("Error", "Username or email already exists")
             self.signup_btn.setText("Create Account")

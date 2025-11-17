@@ -15,12 +15,28 @@ class EmployeeDashboard(QWidget):
     logout_signal = pyqtSignal()
     
     def __init__(self, db, user_data):
-        super().__init__()
-        self.db = db
-        self.user_data = user_data
-        self.employee_id = user_data['employee_id']
-        self.is_manager = user_data['user_type'] == 'manager'
-        self.init_ui()
+            super().__init__()
+
+            # Defensive: ensure user_data is a dict
+            if not isinstance(user_data, dict):
+                print("ERROR: EmployeeDashboard expected user_data dict but got:", repr(user_data), type(user_data))
+                from PyQt6.QtWidgets import QMessageBox
+                QMessageBox.critical(None, "Internal Error", "Invalid user data passed to Employee Dashboard.")
+                return
+
+            # store user data under both names for compatibility with other modules
+            self.db = db
+            self.user_data = user_data
+            self.current_user = user_data
+
+            # safely extract fields (use .get to avoid KeyError)
+            self.employee_id = user_data.get('employee_id')
+            # normalize user_type to a string if present
+            user_type = user_data.get('user_type')
+            self.is_manager = (str(user_type).lower() == 'manager') if user_type is not None else False
+
+            # continue initialization
+            self.init_ui()
     
     def init_ui(self):
         layout = QVBoxLayout()
@@ -57,7 +73,9 @@ class EmployeeDashboard(QWidget):
         self.tabs.addTab(self.movie_tab, "🎬 Movies")
         
         # Customer Management Tab
-        self.customer_tab = CustomerDashboard(self.db, self.is_manager)
+        self.customer_tab = CustomerDashboard(self.db, self.current_user.get('customer_id'))
+
+
         self.tabs.addTab(self.customer_tab, "👥 Customers")
         
         # Booking Management Tab

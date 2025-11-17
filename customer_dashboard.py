@@ -12,11 +12,30 @@ class CustomerDashboard(QWidget):
     
     def __init__(self, db, user_data):
         super().__init__()
+
+        # store db
         self.db = db
-        self.user_data = user_data
-        self.current_customer_id = user_data['customer_id']
+
+        # Accept either a dict (user_data) or an int (customer_id)
+        if isinstance(user_data, dict):
+            self.user_data = user_data
+            # Safely extract customer_id (may be None for employees/managers)
+            self.current_customer_id = self.user_data.get('customer_id')
+        elif isinstance(user_data, int):
+            # caller passed the id directly
+            self.user_data = None
+            self.current_customer_id = user_data
+        else:
+            # invalid payload — show a clear error and bail out
+            print("ERROR: CustomerDashboard expected user_data (dict) or customer_id (int), got:",
+                  repr(user_data), type(user_data))
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.critical(None, "Internal Error",
+                                 "Invalid user data provided to Customer Dashboard. Please try again.")
+            return
+
+        # Continue initialization normally
         self.init_ui()
-    
     def init_ui(self):
         layout = QVBoxLayout()
         

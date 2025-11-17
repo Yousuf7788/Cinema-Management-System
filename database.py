@@ -43,10 +43,23 @@ class Database:
 
     
     def hash_password(self, password: str) -> str:
-        return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-    
-    def verify_password(self, password: str, hashed: str) -> bool:
-        return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
+        """
+        NOTE: This no longer hashes. It simply returns the raw password string.
+        Storing plaintext passwords is insecure.
+        """
+        return password
+
+    def verify_password(self, password: str, stored: str) -> bool:
+        """
+        Compare password directly to stored plaintext value.
+        """
+        try:
+            # Defensive: ensure types are str
+            return str(password) == str(stored)
+        except Exception as e:
+            self.logger.error(f"verify_password error: {e}")
+            return False
+
     
     def create_user(self, username: str, password: str, email: str, user_type: str, 
                    first_name: str, last_name: str, phone: str = None) -> bool:
@@ -66,11 +79,13 @@ class Database:
             customer_id = cursor.fetchone()[0]
             
             # Insert into Users table
-            password_hash = self.hash_password(password)
+# Insert into Users table (store plaintext password)
+            plain_password = self.hash_password(password)  # now returns plaintext
             cursor.execute(
                 "INSERT INTO Users (username, password_hash, email, user_type, customer_id) VALUES (?, ?, ?, ?, ?)",
-                username, password_hash, email, user_type, customer_id
+                username, plain_password, email, user_type, customer_id
             )
+
             
             self.connection.commit()
             return True
@@ -81,38 +96,96 @@ class Database:
             return False
     
     def authenticate_user(self, username: str, password: str) -> Optional[Dict[str, Any]]:
+        """
+        Authenticate a user by username and plaintext password.
+        Returns a dict on success, or None on failure.
+        """
         try:
+            print(f"DEBUG: authenticate_user called with username={username!r}")
             cursor = self.connection.cursor()
             cursor.execute(
                 """SELECT u.user_id, u.username, u.password_hash, u.user_type, u.customer_id, u.employee_id,
-                          c.first_name, c.last_name, c.email, c.phone_number,
-                          e.first_name as emp_first_name, e.last_name as emp_last_name, e.position
-                   FROM Users u 
-                   LEFT JOIN Customer c ON u.customer_id = c.customer_id
-                   LEFT JOIN Employee e ON u.employee_id = e.employee_id
-                   WHERE u.username = ?""",
+                        c.first_name, c.last_name, c.email, c.phone_number,
+                        e.first_name as emp_first_name, e.last_name as emp_last_name, e.position
+                FROM Users u 
+                LEFT JOIN Customer c ON u.customer_id = c.customer_id
+                LEFT JOIN Employee e ON u.employee_id = e.employee_id
+                WHERE LOWER(u.username) = LOWER(?)""",
                 username
             )
             user = cursor.fetchone()
-            
-            if user and self.verify_password(password, user.password_hash):
-                return {
-                    'user_id': user.user_id,
-                    'username': user.username,
-                    'user_type': user.user_type,
-                    'customer_id': user.customer_id,
-                    'employee_id': user.employee_id,
-                    'first_name': user.first_name or user.emp_first_name,
-                    'last_name': user.last_name or user.emp_last_name,
-                    'email': user.email,
-                    'phone': user.phone_number,
-                    'position': user.position
-                }
-            return None
-            
         except Exception as e:
-            self.logger.error(f"Authentication error: {e}")
+            self.logger.error(f"Authentication SQL error: {e}")
+            print("DEBUG: Authentication SQL error:", e)
             return None
+
+        print("DEBUG: authenticate_user - fetched row:", repr(user), "type:", type(user))
+        if not user:
+            print("DEBUG: authenticate_user - no user found for:", username)
+            return None
+
+        # get stored value (works for pyodbc row or tuple)
+        try:
+            stored = getattr(user, 'password_hash', None)
+            if stored is None:
+                stored = user[2]  # fallback index
+        except Exception as e:
+            print("DEBUG: could not extract stored password:", e)
+            return None
+
+        # normalize stored to string and compare plaintext
+        try:
+            stored_str = str(stored).strip()
+        except Exception as e:
+            print("DEBUG: error normalizing stored password:", e)
+            return None
+
+        pw_ok = False
+        try:
+            pw_ok = self.verify_password(password, stored_str)
+        except Exception as e:
+            print("DEBUG: verify_password raised:", e)
+            pw_ok = False
+
+        print("DEBUG: password verification result for", username, ":", pw_ok)
+        if not pw_ok:
+            return None
+
+        # Build user_data dict (defensive)
+        def get(attr, idx):
+            try:
+                return getattr(user, attr, None) or (user[idx] if len(user) > idx else None)
+            except Exception:
+                return (user[idx] if len(user) > idx else None)
+
+        user_id = get('user_id', 0)
+        uname = get('username', 1)
+        utype_raw = get('user_type', 3)
+        user_type = utype_raw.strip().lower() if isinstance(utype_raw, str) else None
+        customer_id = get('customer_id', 4)
+        employee_id = get('employee_id', 5)
+        first_name = get('first_name', 6) or get('emp_first_name', 10)
+        last_name = get('last_name', 7) or get('emp_last_name', 11)
+        email = get('email', 8)
+        phone = get('phone_number', 9)
+        position = get('position', 12) if len(user) > 12 else None
+
+        user_data = {
+            'user_id': user_id,
+            'username': uname,
+            'user_type': user_type,
+            'customer_id': customer_id,
+            'employee_id': employee_id,
+            'first_name': first_name,
+            'last_name': last_name,
+            'email': email,
+            'phone': phone,
+            'position': position
+        }
+
+        print("DEBUG: authenticate_user returning user_data:", user_data)
+        return user_data
+
     
     def get_movies(self) -> List[Dict[str, Any]]:
         try:
@@ -205,6 +278,55 @@ class Database:
             self.logger.error(f"Error creating booking: {e}")
             self.connection.rollback()
             return None
+        
+    def get_all_bookings(self) -> List[Dict[str, Any]]:
+        """Retrieve ALL bookings across all customers (for managers/employees)."""
+        try:
+            cursor = self.connection.cursor()
+            cursor.execute("""
+                SELECT 
+                    b.booking_id,
+                    b.booking_date,
+                    b.total_amount,
+                    b.status,
+                    c.first_name AS customer_first_name,
+                    c.last_name AS customer_last_name,
+                    c.email AS customer_email,
+                    m.title AS movie_title,
+                    s.start_time,
+                    mh.hall_name,
+                    STRING_AGG(CONCAT(seat.row_letter, seat.seat_number), ', ') AS seats
+                FROM Booking b
+                JOIN Customer c ON b.customer_id = c.customer_id
+                JOIN Screening s ON b.screening_id = s.screening_id
+                JOIN Movie m ON s.movie_id = m.movie_id
+                JOIN Movie_Hall mh ON s.hall_id = mh.hall_id
+                JOIN Booking_Seat bs ON b.booking_id = bs.booking_id
+                JOIN Seat seat ON bs.seat_id = seat.seat_id
+                GROUP BY 
+                    b.booking_id, 
+                    b.booking_date, 
+                    b.total_amount, 
+                    b.status,
+                    c.first_name,
+                    c.last_name,
+                    c.email,
+                    m.title,
+                    s.start_time,
+                    mh.hall_name
+                ORDER BY b.booking_date DESC;
+            """)
+
+            # Convert each row into a dict using column names
+            return [
+                dict(zip([column[0] for column in cursor.description], row))
+                for row in cursor.fetchall()
+            ]
+
+        except Exception as e:
+            self.logger.error(f"Error fetching all bookings: {e}")
+            return []
+
     
     def get_user_bookings(self, customer_id: int) -> List[Dict[str, Any]]:
         try:
@@ -276,6 +398,29 @@ class Database:
             self.logger.error(f"Error fetching pending refunds: {e}")
             return []
     
+    def get_halls(self) -> List[Dict[str, Any]]:
+        """Return a list of all movie halls with hall_id, hall_name, and capacity."""
+        try:
+            cursor = self.connection.cursor()
+            cursor.execute("""
+                SELECT 
+                    hall_id,
+                    hall_name,
+                    capacity
+                FROM Movie_Hall
+                ORDER BY hall_id
+            """)
+            
+            rows = cursor.fetchall()
+            return [
+                dict(zip([column[0] for column in cursor.description], row))
+                for row in rows
+            ]
+
+        except Exception as e:
+            self.logger.error(f"Error fetching halls: {e}")
+            return []
+
     def process_refund(self, refund_id: int, employee_id: int, status: str, refund_amount: float = None) -> bool:
         try:
             cursor = self.connection.cursor()

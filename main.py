@@ -128,6 +128,13 @@ class MainApplication(QMainWindow):
     
     def handle_login_success(self, user_data):
         """Handle successful login and redirect to appropriate dashboard"""
+        print("DEBUG: MainApplication.handle_login_success received:", repr(user_data), "type:", type(user_data))
+
+        if not isinstance(user_data, dict):
+            from PyQt6.QtWidgets import QMessageBox
+            print("ERROR: Received invalid payload at MainApplication — refusing to continue.")
+            QMessageBox.critical(self, "Login Error", "Internal login response invalid. Please try again.")
+            return
         self.current_user = user_data
         user_type = user_data['user_type']
         
@@ -138,7 +145,8 @@ class MainApplication(QMainWindow):
         elif user_type == 'manager':
             self.show_manager_dashboard()
         else:
-            QMessageBox.critical(self, "Error", f"Unknown user type: {user_type}")
+            #QMessageBox.critical(self, "Error", f"Unknown user type: {user_type}")
+            print("unknown user type")
     
     def handle_signup_success(self):
         """Handle successful signup - return to welcome screen"""

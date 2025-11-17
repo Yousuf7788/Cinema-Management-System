@@ -54,21 +54,54 @@ class BookingTab(BaseTab, Ui_BookingTab):
         self.screeningCombo.clear()
         if screenings:
             for screening in screenings:
-                display_text = f"{screening['title']} - {screening['hall_name']} - {screening['start_time']} - ${screening['ticket_price']}"
-                self.screeningCombo.addItem(display_text, screening['screening_id'])
-        
-        # Load customers (only for employees/managers)
-        if not self.current_customer_id:
-            customers = self.db.get_customers()
-            self.customerCombo.clear()
-            if customers:
-                for customer in customers:
-                    display_text = f"{customer['first_name']} {customer['last_name']} ({customer['email']})"
-                    self.customerCombo.addItem(display_text, customer['customer_id'])
+                # defensive: provider keys may be missing
+                title = screening.get('title', '')
+                hall = screening.get('hall_name', '')
+                start = screening.get('start_time', '')
+                price = screening.get('ticket_price', '')
+                display_text = f"{title} - {hall} - {start} - ${price}"
+                self.screeningCombo.addItem(display_text, screening.get('screening_id'))
+
+        # Clear customer combo first
+        self.customerCombo.clear()
+
+        # If current_customer_id is None => we are an employee/manager: load all customers
+        if self.current_customer_id is None:
+            try:
+                cursor = self.db.connection.cursor()
+                cursor.execute("SELECT customer_id, first_name, last_name, email FROM Customer")
+                rows = cursor.fetchall()
+                if rows:
+                    for r in rows:
+                        # r may be a pyodbc.Row or tuple
+                        try:
+                            cust_id = getattr(r, 'customer_id', None) or r[0]
+                            first = getattr(r, 'first_name', None) or (r[1] if len(r) > 1 else '')
+                            last = getattr(r, 'last_name', None) or (r[2] if len(r) > 2 else '')
+                            email = getattr(r, 'email', None) or (r[3] if len(r) > 3 else '')
+                        except Exception:
+                            # fallback mapping
+                            cust_id = r[0] if len(r) > 0 else None
+                            first = r[1] if len(r) > 1 else ''
+                            last = r[2] if len(r) > 2 else ''
+                            email = r[3] if len(r) > 3 else ''
+
+                        display_text = f"{(first or '').strip()} {(last or '').strip()} ({(email or '').strip()})".strip()
+                        self.customerCombo.addItem(display_text, cust_id)
+            except Exception as e:
+                print("DEBUG: load_dynamic_data - failed to load customers:", e)
         else:
-            # For customers, pre-select their ID
-            self.customerCombo.addItem(f"{self.user_data['first_name']} {self.user_data['last_name']}", self.current_customer_id)
+            # For customers (a logged-in customer), pre-select their ID and show name
+            # Use user_data safely (may be None for some flows)
+            if isinstance(self.user_data, dict):
+                first = self.user_data.get('first_name', '') or ''
+                last = self.user_data.get('last_name', '') or ''
+                label = f"{first} {last}".strip() or f"Customer {self.current_customer_id}"
+            else:
+                label = f"Customer {self.current_customer_id}"
+            self.customerCombo.addItem(label, self.current_customer_id)
             self.customerCombo.setCurrentIndex(0)
+
     
     def calculate_price(self):
         """Calculate price based on selected screening"""
@@ -87,43 +120,91 @@ class BookingTab(BaseTab, Ui_BookingTab):
         self.show_success_message("Refresh", "Data refreshed successfully!")
     
     def load_data(self):
-        """Load booking data into table"""
+        """Load booking data into table (safe, tolerant to varying DB column names)."""
+        # Choose source depending on whether a specific customer is active
         if self.current_customer_id:
-            # Customer view - only show their bookings
             bookings = self.db.get_user_bookings(self.current_customer_id)
         else:
-            # Employee/Manager view - show all bookings
             bookings = self.db.get_all_bookings()
-        
-        if bookings:
-            self.bookingTable.setRowCount(len(bookings))
-            self.bookingTable.setColumnCount(7)
-            self.bookingTable.setHorizontalHeaderLabels([
-                "Booking ID", "Customer", "Movie", "Screening Time", 
-                "Booking Date", "Total Amount", "Status"
-            ])
-            
-            for row_idx, booking in enumerate(bookings):
-                self.bookingTable.setItem(row_idx, 0, QTableWidgetItem(str(booking['booking_id'])))
-                
-                if self.current_customer_id:
-                    customer_name = f"{self.user_data['first_name']} {self.user_data['last_name']}"
-                else:
-                    customer_name = f"{booking['first_name']} {booking['last_name']}"
-                
-                self.bookingTable.setItem(row_idx, 1, QTableWidgetItem(customer_name))
-                self.bookingTable.setItem(row_idx, 2, QTableWidgetItem(booking['title']))
-                self.bookingTable.setItem(row_idx, 3, QTableWidgetItem(str(booking['start_time'])))
-                self.bookingTable.setItem(row_idx, 4, QTableWidgetItem(str(booking['booking_date'])))
-                self.bookingTable.setItem(row_idx, 5, QTableWidgetItem(f"${booking['total_amount']:.2f}"))
-                
-                status_item = QTableWidgetItem(booking.get('status', 'confirmed'))
-                self.color_status_item(status_item, booking.get('status', 'confirmed'))
-                self.bookingTable.setItem(row_idx, 6, status_item)
-        else:
+
+        # Clear table if no bookings
+        if not bookings:
             self.bookingTable.setRowCount(0)
             self.bookingTable.setColumnCount(1)
             self.bookingTable.setHorizontalHeaderLabels(["No bookings found"])
+            return
+
+        # Prepare table
+        self.bookingTable.setRowCount(len(bookings))
+        self.bookingTable.setColumnCount(7)
+        self.bookingTable.setHorizontalHeaderLabels([
+            "Booking ID", "Customer", "Movie", "Screening Time",
+            "Booking Date", "Total Amount", "Status"
+        ])
+
+        for row_idx, booking in enumerate(bookings):
+            # safe helpers that accept multiple possible key names
+            def pick(*keys, default=""):
+                for k in keys:
+                    if k in booking and booking[k] is not None:
+                        return booking[k]
+                return default
+
+            booking_id = pick('booking_id', 'id', default='')
+            # Customer name:
+            if self.current_customer_id:
+                # Prefer user_data if available, else try booking fields
+                if isinstance(getattr(self, 'user_data', None), dict):
+                    first = self.user_data.get('first_name') or ''
+                    last = self.user_data.get('last_name') or ''
+                else:
+                    first = pick('first_name', 'customer_first_name', 'fname', default='')
+                    last  = pick('last_name',  'customer_last_name',  'lname', default='')
+                customer_name = f"{first} {last}".strip() or f"Customer {self.current_customer_id}"
+            else:
+                first = pick('first_name', 'customer_first_name', default='')
+                last  = pick('last_name',  'customer_last_name', default='')
+                customer_name = f"{first} {last}".strip() or "Unknown Customer"
+
+            # Movie title (support 'movie_title' or 'title')
+            movie_title = pick('movie_title', 'title', default='Unknown Movie')
+
+            # Times / dates: convert to string safely
+            start_time = pick('start_time', 'screening_time', default='')
+            booking_date = pick('booking_date', 'date', default='')
+
+            # Amount and status (with defaults)
+            total_amount = pick('total_amount', 'total', 'amount', default=0.0)
+            try:
+                total_str = f"${float(total_amount):.2f}"
+            except Exception:
+                total_str = f"${0.00:.2f}"
+
+            status = pick('status', default='confirmed')
+
+            # Insert into table (use safe str() conversions)
+            self.bookingTable.setItem(row_idx, 0, QTableWidgetItem(str(booking_id)))
+            self.bookingTable.setItem(row_idx, 1, QTableWidgetItem(str(customer_name)))
+            self.bookingTable.setItem(row_idx, 2, QTableWidgetItem(str(movie_title)))
+            self.bookingTable.setItem(row_idx, 3, QTableWidgetItem(str(start_time)))
+            self.bookingTable.setItem(row_idx, 4, QTableWidgetItem(str(booking_date)))
+            self.bookingTable.setItem(row_idx, 5, QTableWidgetItem(total_str))
+
+            # Status with coloring helper
+            status_item = QTableWidgetItem(str(status))
+            try:
+                self.color_status_item(status_item, status)
+            except Exception as e:
+                # If color helper fails, still set the item
+                print("DEBUG: color_status_item failed:", e)
+            self.bookingTable.setItem(row_idx, 6, status_item)
+
+        # Optional: auto-resize columns for readability
+        try:
+            self.bookingTable.resizeColumnsToContents()
+        except Exception:
+            pass
+
     
     def add_record(self):
         """Add new booking with seat selection"""
