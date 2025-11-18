@@ -240,41 +240,50 @@ class ManagerDashboard(EmployeeDashboard):
             return {'total': 0, 'confirmed': 0, 'refund_rate': 0}
     
     def calculate_movie_statistics(self):
-        """Calculate movie-related statistics"""
+        """Calculate movie-related statistics (robust against non-numeric varchar values)."""
         try:
             cursor = self.db.connection.cursor()
-            
+
             # Total movies
             cursor.execute("SELECT COUNT(*) FROM Movie")
-            total_movies = cursor.fetchone()[0]
-            
-            # Most popular movie (by booking count)
+            total_movies = cursor.fetchone()[0] or 0
+
+            # Most popular movie (by confirmed booking count)
             cursor.execute("""
                 SELECT TOP 1 m.title, COUNT(b.booking_id) as booking_count
                 FROM Movie m
                 LEFT JOIN Screening s ON m.movie_id = s.movie_id
-                LEFT JOIN Booking b ON s.screening_id = b.screening_id
-                WHERE b.status = 'confirmed'
+                LEFT JOIN Booking b ON s.screening_id = b.screening_id AND b.status = 'confirmed'
                 GROUP BY m.movie_id, m.title
                 ORDER BY booking_count DESC
             """)
             popular_result = cursor.fetchone()
             most_popular = popular_result[0] if popular_result else "N/A"
-            
-            # Average rating
-            cursor.execute("SELECT AVG(CAST(REPLACE(rating, 'R', '17') AS FLOAT)) FROM Movie WHERE rating IS NOT NULL")
+
+            # Average rating — use TRY_CONVERT to avoid conversion errors from bad varchar values.
+            # NULLIF(LTRIM(RTRIM(rating)), '') converts empty strings to NULL so AVG ignores them.
+            cursor.execute("""
+                SELECT AVG(TRY_CONVERT(float, NULLIF(LTRIM(RTRIM(rating)), ''))) AS avg_rating
+                FROM Movie
+                WHERE rating IS NOT NULL
+            """)
             avg_rating_result = cursor.fetchone()
-            avg_rating = f"{avg_rating_result[0]:.1f}" if avg_rating_result[0] else "N/A"
-            
+            avg_value = avg_rating_result[0] if avg_rating_result else None
+
+            # Format avg_rating for display; guard against None
+            avg_rating = f"{avg_value:.1f}" if isinstance(avg_value, (float, int)) else "N/A"
+
             return {
                 'total_movies': total_movies,
                 'most_popular': most_popular,
                 'avg_rating': avg_rating
             }
+
         except Exception as e:
+            # print/log friendly error and return safe defaults
             print(f"Error calculating movie statistics: {e}")
             return {'total_movies': 0, 'most_popular': 'N/A', 'avg_rating': 'N/A'}
-    
+
     def enhance_customer_tab(self):
         """Add manager-specific features to customer management"""
         # This would add extra manager functionality to the customer tab

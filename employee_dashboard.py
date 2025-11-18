@@ -73,7 +73,9 @@ class EmployeeDashboard(QWidget):
         self.tabs.addTab(self.movie_tab, "🎬 Movies")
         
         # Customer Management Tab
-        self.customer_tab = CustomerDashboard(self.db, self.current_user.get('customer_id'))
+# allow None intentionally for staff/employee view
+        self.customer_tab = CustomerDashboard(self.db, None, allow_none=True)
+
 
 
         self.tabs.addTab(self.customer_tab, "👥 Customers")

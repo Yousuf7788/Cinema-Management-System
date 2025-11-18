@@ -6,36 +6,51 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTabWidget,
 from PyQt6.QtCore import pyqtSignal, Qt, QDateTime
 from PyQt6.QtGui import QFont, QPixmap
 import os
+import logging
+
+# Configure logging
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class CustomerDashboard(QWidget):
     logout_signal = pyqtSignal()
     
-    def __init__(self, db, user_data):
-        super().__init__()
+    def __init__(self, db, user_data=None, *, allow_none=False, parent=None):
+            """
+            db: your DB wrapper/connection
+            user_data: either dict containing 'customer_id', or int, or None
+            allow_none: if True, constructor will create a dashboard usable by staff (no customer)
+            """
+            super().__init__(parent)
 
-        # store db
-        self.db = db
-
-        # Accept either a dict (user_data) or an int (customer_id)
-        if isinstance(user_data, dict):
-            self.user_data = user_data
-            # Safely extract customer_id (may be None for employees/managers)
-            self.current_customer_id = self.user_data.get('customer_id')
-        elif isinstance(user_data, int):
-            # caller passed the id directly
+            # Basic required attribute so partial init won't break callers
+            self.db = db
             self.user_data = None
-            self.current_customer_id = user_data
-        else:
-            # invalid payload — show a clear error and bail out
-            print("ERROR: CustomerDashboard expected user_data (dict) or customer_id (int), got:",
-                  repr(user_data), type(user_data))
-            from PyQt6.QtWidgets import QMessageBox
-            QMessageBox.critical(None, "Internal Error",
-                                 "Invalid user data provided to Customer Dashboard. Please try again.")
-            return
+            self.current_customer_id = None
 
-        # Continue initialization normally
-        self.init_ui()
+            # Accept either dict, int, or None (if allow_none True)
+            if isinstance(user_data, dict):
+                self.user_data = user_data
+                self.current_customer_id = self.user_data.get('customer_id')
+            elif isinstance(user_data, int):
+                self.user_data = None
+                self.current_customer_id = user_data
+            elif user_data is None:
+                # allow None for staff views; caller must set allow_none when that's expected
+                if not allow_none:
+                    # Prefer to raise so calling code notices programmer error.
+                    raise ValueError("CustomerDashboard expected user_data (dict) or customer_id (int); got None. "
+                                    "If you want a staff view, call with allow_none=True.")
+                # else: leave current_customer_id as None (staff/manager view)
+                logger.debug("Creating staff/manager CustomerDashboard (no customer_id).")
+            else:
+                # invalid payload — raise (don't show QMessageBox here)
+                raise TypeError(f"CustomerDashboard expected user_data (dict) or customer_id (int) or None, "
+                                f"got {type(user_data)!r}: {user_data!r}")
+
+            # Now safe to proceed to UI construction
+            # Any heavy UI setup should be in init_ui() which must guard against None customer_id
+            self.init_ui()
     def init_ui(self):
         layout = QVBoxLayout()
         
@@ -44,7 +59,20 @@ class CustomerDashboard(QWidget):
         header_widget.setStyleSheet("background-color: #2c3e50; padding: 10px;")
         header_layout = QHBoxLayout(header_widget)
         
-        welcome_label = QLabel(f"🎬 Welcome, {self.user_data['first_name']} {self.user_data['last_name']}!")
+# safe welcome label — works for customers and staff (no customer_data)
+        if self.user_data:
+            first = self.user_data.get('first_name', '').strip()
+            last = self.user_data.get('last_name', '').strip()
+            if first or last:
+                welcome_text = f"🎬 Welcome, {first} {last}!"
+            else:
+                welcome_text = "🎬 Welcome!"
+        else:
+            # staff/manager view when no customer provided
+            welcome_text = "🎬 Welcome, staff member!"
+
+        welcome_label = QLabel(welcome_text)
+
         welcome_label.setFont(QFont("Arial", 16, QFont.Weight.Bold))
         welcome_label.setStyleSheet("color: white;")
         
