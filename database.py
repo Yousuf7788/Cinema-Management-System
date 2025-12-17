@@ -259,6 +259,45 @@ class Database:
         except Exception as e:
             self.logger.error(f"Error fetching available seats: {e}")
             return []
+
+    def get_screening_seat_status(self, screening_id: int) -> List[Dict[str, Any]]:
+        """
+        Get ALL seats for the screening's hall with their status (available/booked).
+        Returns list of dicts: {seat_id, row, number, type, status, price}
+        """
+        try:
+            cursor = self.connection.cursor()
+            
+            # This query gets ALL seats for the hall and checks if they are booked for this screening
+            query = """
+                SELECT 
+                    s.seat_id, 
+                    s.row_letter, 
+                    s.seat_number, 
+                    s.seat_type,
+                    CASE 
+                        WHEN bs.seat_id IS NOT NULL THEN 'booked'
+                        ELSE 'available'
+                    END as status
+                FROM Seat s
+                JOIN Screening sc ON s.hall_id = sc.hall_id
+                LEFT JOIN (
+                    SELECT bs.seat_id 
+                    FROM Booking_Seat bs
+                    JOIN Booking b ON bs.booking_id = b.booking_id
+                    WHERE b.screening_id = ? 
+                    AND b.status IN ('confirmed', 'pending_refund', 'pending_approval')
+                ) booking_check ON s.seat_id = booking_check.seat_id
+                WHERE sc.screening_id = ?
+                ORDER BY s.row_letter, CAST(s.seat_number AS INT)
+            """
+            
+            cursor.execute(query, (screening_id, screening_id))
+            return [dict(zip([column[0] for column in cursor.description], row)) for row in cursor.fetchall()]
+            
+        except Exception as e:
+            self.logger.error(f"Error fetching screening seat status: {e}")
+            return []
     
     def create_booking(self, customer_id: int, screening_id: int, seat_ids: List[int], total_amount: float, status: str = 'confirmed', payment_method: str = 'Credit Card', payment_status: str = 'completed') -> Optional[int]:
         try:

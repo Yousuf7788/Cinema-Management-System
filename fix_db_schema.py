@@ -30,9 +30,9 @@ def fix_schema():
             cursor.execute(f"ALTER TABLE Booking DROP CONSTRAINT {constraint_name}")
             db.connection.commit()
             
-            # Add new constraint with 'pending_refund'
+            # Add new constraint with 'pending_refund', 'pending_approval', 'pending'
             print("Adding new constraint...")
-            cursor.execute("ALTER TABLE Booking ADD CONSTRAINT CK_Booking_Status CHECK (status IN ('confirmed', 'cancelled', 'refunded', 'pending_refund'))")
+            cursor.execute("ALTER TABLE Booking ADD CONSTRAINT CK_Booking_Status CHECK (status IN ('confirmed', 'cancelled', 'refunded', 'pending_refund', 'pending_approval', 'pending'))")
             db.connection.commit()
             print("Schema updated successfully!")
         else:
@@ -41,7 +41,8 @@ def fix_schema():
             # Optional: Try to add it anyway if it doesn't exist
             try:
                 print("Attempting to add constraint anyway...")
-                cursor.execute("ALTER TABLE Booking ADD CONSTRAINT CK_Booking_Status CHECK (status IN ('confirmed', 'cancelled', 'refunded', 'pending_refund'))")
+                # Updated allowed statuses to include 'pending_approval' and 'pending'
+                cursor.execute("ALTER TABLE Booking ADD CONSTRAINT CK_Booking_Status CHECK (status IN ('confirmed', 'cancelled', 'refunded', 'pending_refund', 'pending_approval', 'pending'))")
                 db.connection.commit()
                 print("Added new constraint.")
             except Exception as e:

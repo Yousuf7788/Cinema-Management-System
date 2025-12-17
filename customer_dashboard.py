@@ -421,16 +421,33 @@ class MoviesTab(QWidget):
                     break
             
             if seat_id:
-                # Create booking
-                booking_id = self.db.create_booking(self.customer_id, screening['screening_id'], [seat_id], screening['ticket_price'])
+                # Show Payment Screen
+                from payment_dialog import PaymentDialog
+                # Assuming ticket_price is convertible to float
+                total_amount = float(screening['ticket_price'])
+                payment_dialog = PaymentDialog(total_amount, parent=self)
+                if payment_dialog.exec() != QDialog.DialogCode.Accepted:
+                    return # User cancelled payment
+
+                method = payment_dialog.get_payment_method()
+
+                # Create booking with pending status
+                booking_id = self.db.create_booking(
+                    self.customer_id, 
+                    screening['screening_id'], 
+                    [seat_id], 
+                    total_amount,
+                    status='pending_approval',
+                    payment_method=method,
+                    payment_status='pending'
+                )
                 
                 if booking_id:
-                    QMessageBox.information(self, "Booking Successful!", 
-                                          f"🎉 Booking confirmed!\n"
+                    QMessageBox.information(self, "Payment Recorded", 
+                                          f"🎉 Payment recorded!\n"
                                           f"Booking ID: {booking_id}\n"
-                                          f"Movie: {screening['title']}\n"
-                                          f"Seat: {seat}\n"
-                                          f"Total: ${screening['ticket_price']}")
+                                          f"Status: Pending Approval\n"
+                                          f"Please wait for an employee to confirm your booking.")
                     self.load_movies()  # Refresh available movies
                 else:
                     QMessageBox.critical(self, "Booking Failed", "Failed to create booking. Please try again.")

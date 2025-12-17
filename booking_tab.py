@@ -246,152 +246,244 @@ class BookingTab(BaseTab, Ui_BookingTab):
     
     def add_record(self):
         """Add new booking with seat selection"""
-        customer_id = self.current_customer_id or self.customerCombo.currentData()
-        screening_id = self.screeningCombo.currentData()
-        booking_date = self.bookingDateInput.dateTime().toString("yyyy-MM-dd HH:mm:ss")
-        total_amount = self.totalAmountInput.value()
-        
-        if not customer_id or not screening_id:
-            self.show_error_message("Error", "Customer and Screening are required!")
-            return
-        
-        # Get available seats for the screening
-        available_seats = self.db.get_available_seats(screening_id)
-        if not available_seats:
-            self.show_error_message("Sold Out", "No available seats for this screening!")
-            return
-        
-        # Show seat selection dialog
-        seat_ids = self.select_seats_dialog(available_seats)
-        if not seat_ids:
-            return  # User cancelled
+        try:
+            print("DEBUG: add_record transaction started") # Debug print
+            customer_id = self.current_customer_id or self.customerCombo.currentData()
+            screening_id = self.screeningCombo.currentData()
+            
+            print(f"DEBUG: customer_id={customer_id}, screening_id={screening_id}")
+            
+            if not customer_id or not screening_id:
+                self.show_error_message("Error", "Customer and Screening are required!")
+                return
+            
+            # Get ALL seats with status for the screening
+            print("DEBUG: fetching screening seats...")
+            screening_seats = self.db.get_screening_seat_status(screening_id)
+            print(f"DEBUG: fetched {len(screening_seats) if screening_seats else 'None'} seats")
+            
+            if not screening_seats:
+                self.show_error_message("Error", "Could not fetch seat information! (Check Database/Logs)")
+                return
+                
+            # Check if there are ANY available seats
+            available_count = sum(1 for s in screening_seats if s['status'] == 'available')
+            print(f"DEBUG: available_count={available_count}")
+            
+            if available_count == 0:
+                self.show_error_message("Sold Out", "No available seats for this screening!")
+                return
+            
+            # Show seat selection dialog
+            print("DEBUG: showing select_seats_dialog")
+            seat_ids = self.select_seats_dialog(screening_seats)
+            print(f"DEBUG: selected seat_ids={seat_ids}")
+            
+            if not seat_ids:
+                return  # User cancelled
 
-        # Show Payment Screen
-        from payment_dialog import PaymentDialog
-        payment_dialog = PaymentDialog(total_amount, parent=self)
-        if payment_dialog.exec() != QDialog.DialogCode.Accepted:
-            return # User cancelled payment
+            # Calculate total amount based on number of seats
+            ticket_price = 0.0
+            screenings = self.db.get_screenings()
+            for s in screenings:
+                if s['screening_id'] == screening_id:
+                    ticket_price = float(s['ticket_price'])
+                    break
+            
+            total_amount = ticket_price * len(seat_ids)
+            self.totalAmountInput.setValue(total_amount)
 
-        method = payment_dialog.get_payment_method()
-        
-        # Create booking with 'pending_approval' status and 'pending' payment
-        booking_id = self.db.create_booking(
-            customer_id, 
-            screening_id, 
-            seat_ids, 
-            total_amount, 
-            status='pending_approval',
-            payment_method=method,
-            payment_status='pending'
-        )
-        
-        if booking_id:
-            self.show_success_message(
-                "Payment Recorded", 
-                f"Booking ID: {booking_id}\n\nStatus: Pending Approval\nPayment recorded using {method}.\nPlease wait for an employee to confirm your booking."
+            # Show Payment Screen
+            from payment_dialog import PaymentDialog
+            payment_dialog = PaymentDialog(total_amount, parent=self)
+            if payment_dialog.exec() != QDialog.DialogCode.Accepted:
+                return # User cancelled payment
+
+            method = payment_dialog.get_payment_method()
+            
+            # Determine Status and Payment Status
+            # Default: Online Customer -> Pending Approval (Paid, needs verify)
+            status = 'pending_approval'
+            payment_status = 'completed' # PaymentDialog implies success
+            
+            # Logic:
+            # 1. If currently logged in as Employee (current_customer_id is None), they are at POS -> Confirmed immediately.
+            # 2. If Payment Method is 'Cash', it implies physical presence -> Confirmed immediately.
+            
+            is_employee = self.current_customer_id is None
+            if is_employee or method == 'Cash':
+                status = 'confirmed'
+                payment_status = 'completed'
+            
+            # Create booking
+            booking_id = self.db.create_booking(
+                customer_id, 
+                screening_id, 
+                seat_ids, 
+                total_amount, 
+                status=status,
+                payment_method=method,
+                payment_status=payment_status
             )
-            self.clear_form()
-            self.load_data()
-            # Refresh screening data to update remaining seats
-            self.load_dynamic_data()
-        else:
-            self.show_error_message("Error", "Failed to create booking!")
+            
+            if booking_id:
+                msg = f"Booking ID: {booking_id}\n\nSeats: {len(seat_ids)}\nTotal: ${total_amount:.2f}\n\nStatus: {status.title()}\nPayment: {payment_status.title()} ({method})"
+                self.show_success_message("Booking Successful", msg)
+                self.clear_form()
+                self.load_data()
+                # Refresh screening data to update remaining seats
+                self.load_dynamic_data()
+            else:
+                self.show_error_message("Error", "Failed to create booking! (DB Error)")
+                
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            self.show_error_message("Critical Error", f"An error occurred in add_record: {str(e)}")
     
-    def select_seats_dialog(self, available_seats):
-        """Show visual seat selection dialog"""
+    def select_seats_dialog(self, all_seats):
+        """Show visual seat selection dialog with full grid"""
         dialog = QDialog(self)
         dialog.setWindowTitle("Select Seats")
         dialog.setModal(True)
-        dialog.resize(600, 500)
+        dialog.resize(800, 600)
         
         main_layout = QVBoxLayout(dialog)
         
         # Screen visual
         screen_label = QLabel("SCREEN")
         screen_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        screen_label.setStyleSheet("background-color: #95a5a6; color: white; font-weight: bold; border-radius: 5px; padding: 5px; margin-bottom: 20px;")
-        screen_label.setFixedHeight(30)
+        screen_label.setStyleSheet("""
+            background-color: #34495e; 
+            color: white; 
+            font-weight: bold; 
+            border-radius: 5px; 
+            padding: 10px; 
+            margin-bottom: 20px;
+            letter-spacing: 5px;
+        """)
         main_layout.addWidget(screen_label)
         
+        # Instructions
+        instr = QLabel("Select one or more seats. Grey seats are already booked.")
+        instr.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        main_layout.addWidget(instr)
+
         # Scroll area for seats
-        from PyQt6.QtWidgets import QScrollArea, QGridLayout, QWidget, QPushButton
+        from PyQt6.QtWidgets import QScrollArea, QGridLayout, QWidget, QPushButton, QHBoxLayout, QFrame
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll_content = QWidget()
-        grid_layout = QGridLayout(scroll_content)
-        grid_layout.setSpacing(10)
+        scroll.setStyleSheet("QScrollArea { border: none; background-color: #f0f0f0; }")
         
-        # Group available seats by row
-        # Structure: {'A': [seat_obj, ...], 'B': [...]}
+        scroll_content = QWidget()
+        scroll_content.setStyleSheet("background-color: transparent;")
+        grid_layout = QGridLayout(scroll_content)
+        grid_layout.setSpacing(8)
+        grid_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        # Organize seats by row
         rows = {}
-        for seat in available_seats:
+        for seat in all_seats:
             r = seat['row_letter']
             if r not in rows:
                 rows[r] = []
             rows[r].append(seat)
             
-        # create seat buttons
         self.selected_seats = set()
-        seat_buttons = {}
         
-        sorted_rows = sorted(rows.keys())
-        for row_idx, row_letter in enumerate(sorted_rows):
-            # Sort seats in row by number
-            current_row_seats = sorted(rows[row_letter], key=lambda x: int(x['seat_number']))
+        sorted_keys = sorted(rows.keys())
+        for row_idx, row_curr in enumerate(sorted_keys):
+            row_seats = sorted(rows[row_curr], key=lambda x: int(x['seat_number']))
             
-            # Row label
-            grid_layout.addWidget(QLabel(row_letter), row_idx, 0)
+            # Row Label (Left)
+            lbl_left = QLabel(row_curr)
+            lbl_left.setStyleSheet("font-weight: bold; color: #7f8c8d;")
+            grid_layout.addWidget(lbl_left, row_idx, 0, Qt.AlignmentFlag.AlignRight)
             
-            for col_idx, seat in enumerate(current_row_seats):
-                # Cap creation if purely visual limit needed, but better to show actual availability
-                # logic: just show them all in grid
+            for seat in row_seats:
+                seat_num = int(seat['seat_number'])
+                # Use seat_number for column index to preserver gaps if any
+                col_idx = seat_num 
                 
-                btn = QPushButton(str(seat['seat_number']))
-                btn.setFixedSize(40, 40)
-                btn.setCheckable(True)
+                btn = QPushButton(str(seat_num))
+                btn.setFixedSize(35, 35)
                 
-                # Store seat ID in button
+                is_booked = seat['status'] == 'booked'
+                
+                # Store data
                 btn.setProperty('seat_id', seat['seat_id'])
                 
-                # Styling
-                btn.setStyleSheet("""
-                    QPushButton {
-                        background-color: #2ecc71; 
-                        color: white; 
-                        border-radius: 5px;
-                    }
-                    QPushButton:checked {
-                        background-color: #e74c3c;
-                    }
-                """)
+                if is_booked:
+                    btn.setEnabled(False)
+                    btn.setStyleSheet("""
+                        QPushButton {
+                            background-color: #bdc3c7;
+                            color: #7f8c8d;
+                            border: 1px solid #95a5a6;
+                            border-radius: 6px;
+                        }
+                    """)
+                else:
+                    btn.setCheckable(True)
+                    btn.setCursor(Qt.CursorShape.PointingHandCursor)
+                    # Green for available
+                    btn.setStyleSheet("""
+                        QPushButton {
+                            background-color: #2ecc71; 
+                            color: white; 
+                            border: 1px solid #27ae60;
+                            border-radius: 6px;
+                            font-weight: bold;
+                        }
+                        QPushButton:checked {
+                            background-color: #e74c3c;
+                            border: 1px solid #c0392b;
+                        }
+                        QPushButton:hover:!checked {
+                            background-color: #27ae60;
+                        }
+                    """)
+                    
+                    def on_click(checked, s_id=seat['seat_id'], b=btn):
+                        if checked:
+                            self.selected_seats.add(s_id)
+                        else:
+                            if s_id in self.selected_seats:
+                                self.selected_seats.remove(s_id)
+                            
+                    btn.clicked.connect(on_click)
                 
-                def on_seat_clicked(checked, s_id=seat['seat_id'], b=btn):
-                    if checked:
-                        self.selected_seats.add(s_id)
-                        b.setStyleSheet("background-color: #e74c3c; color: white; border-radius: 5px;")
-                    else:
-                        if s_id in self.selected_seats:
-                            self.selected_seats.remove(s_id)
-                        b.setStyleSheet("background-color: #2ecc71; color: white; border-radius: 5px;")
+                grid_layout.addWidget(btn, row_idx, col_idx)
                 
-                btn.clicked.connect(on_seat_clicked)
-                
-                # Allow max 8 columns per row visual
-                grid_row = row_idx
-                grid_col = 1 + col_idx
-                
-                grid_layout.addWidget(btn, grid_row, grid_col)
-                seat_buttons[seat['seat_id']] = btn
+            # Row Label (Right)
+            lbl_right = QLabel(row_curr)
+            lbl_right.setStyleSheet("font-weight: bold; color: #7f8c8d;")
+            # grid_layout.addWidget(lbl_right, row_idx, max_col + 1, Qt.AlignmentFlag.AlignLeft) # optional
 
         scroll.setWidget(scroll_content)
         main_layout.addWidget(scroll)
         
         # Legend
-        legend_layout = QHBoxLayout()
-        legend_layout.addWidget(QLabel("🟩 Available"))
-        legend_layout.addWidget(QLabel("🟥 Selected"))
+        legend_frame = QFrame()
+        legend_layout = QHBoxLayout(legend_frame)
+        
+        def add_legend_item(color, text):
+            item = QHBoxLayout()
+            box = QLabel()
+            box.setFixedSize(15, 15)
+            box.setStyleSheet(f"background-color: {color}; border-radius: 3px;")
+            label = QLabel(text)
+            item.addWidget(box)
+            item.addWidget(label)
+            item.addSpacing(15)
+            legend_layout.addLayout(item)
+            
+        add_legend_item("#2ecc71", "Available")
+        add_legend_item("#e74c3c", "Selected")
+        add_legend_item("#bdc3c7", "Booked")
         legend_layout.addStretch()
-        main_layout.addLayout(legend_layout)
+        
+        main_layout.addWidget(legend_frame)
         
         # Buttons
         button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)

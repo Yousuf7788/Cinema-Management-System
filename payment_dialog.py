@@ -80,7 +80,7 @@ class PaymentDialog(QDialog):
         layout.addWidget(method_label)
         
         self.method_combo = QComboBox()
-        self.method_combo.addItems(["Credit Card", "Debit Card", "PayPal", "Apple Pay", "Google Pay"])
+        self.method_combo.addItems(["Cash", "Credit Card", "Debit Card", "PayPal", "Apple Pay", "Google Pay"])
         layout.addWidget(self.method_combo)
         
         # Buttons
