@@ -2,7 +2,7 @@
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTabWidget, 
                              QTableWidget, QTableWidgetItem, QMessageBox, QLabel, 
                              QPushButton, QDialog, QListWidget, QDialogButtonBox,
-                             QInputDialog, QHeaderView, QScrollArea, QFrame, QGridLayout, QLineEdit)
+                             QInputDialog, QHeaderView, QScrollArea, QFrame, QGridLayout, QLineEdit, QFormLayout)
 from PyQt6.QtCore import pyqtSignal, Qt, QDateTime
 from PyQt6.QtGui import QFont, QPixmap
 import os
@@ -11,6 +11,18 @@ import logging
 # Configure logging
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+
+class ClickableFrame(QFrame):
+    clicked = pyqtSignal()
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+    
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+        super().mousePressEvent(event)
 
 class CustomerDashboard(QWidget):
     logout_signal = pyqtSignal()
@@ -201,7 +213,7 @@ class MoviesTab(QWidget):
                 row += 1
     
     def create_movie_card(self, movie):
-        card = QFrame()
+        card = ClickableFrame()
         card.setFrameStyle(QFrame.Shape.Box)
         card.setStyleSheet("""
             QFrame {
@@ -217,6 +229,7 @@ class MoviesTab(QWidget):
             }
         """)
         card.setFixedSize(300, 400)
+        card.clicked.connect(lambda: self.show_movie_details(movie))
         
         layout = QVBoxLayout(card)
         
@@ -243,51 +256,133 @@ class MoviesTab(QWidget):
         director.setStyleSheet("color: #555; font-size: 11px; margin-bottom: 5px;")
         layout.addWidget(director)
         
-        # Showtimes button
-        showtimes_btn = QPushButton("📅 Check Showtimes & Book")
-        showtimes_btn.clicked.connect(lambda checked, m=movie: self.show_showtimes(m))
-        layout.addWidget(showtimes_btn)
+        # Click hint
+        hint = QLabel("👆 Click to view available showtimes & details")
+        hint.setStyleSheet("color: #3498db; font-size: 10px; font-style: italic; margin-top: 10px;")
+        hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(hint)
         
         layout.addStretch()
         return card
     
-    def show_showtimes(self, movie):
-        screenings = self.db.get_screenings(movie['movie_id'])
-        
-        if not screenings:
-            QMessageBox.information(self, "No Showtimes", f"No showtimes available for {movie['title']}")
-            return
-        
+    def show_movie_details(self, movie):
         dialog = QDialog(self)
-        dialog.setWindowTitle(f"Showtimes for {movie['title']}")
+        dialog.setWindowTitle(f"{movie['title']} - Details & Showtimes")
         dialog.setModal(True)
-        dialog.setFixedSize(500, 400)
+        dialog.setFixedSize(600, 700)
         
         layout = QVBoxLayout(dialog)
         
-        title = QLabel(f"🎬 {movie['title']} - Available Showtimes")
-        title.setFont(QFont("Arial", 14, QFont.Weight.Bold))
-        layout.addWidget(title)
+        # --- Movie Information Section ---
+        info_scroll = QScrollArea()
+        info_scroll.setWidgetResizable(True)
+        info_widget = QWidget()
+        info_layout = QVBoxLayout(info_widget)
         
-        # Showtimes list
+        # Title
+        title = QLabel(f"🎬 {movie['title']}")
+        title.setFont(QFont("Arial", 20, QFont.Weight.Bold))
+        title.setStyleSheet("color: #2c3e50; margin-bottom: 10px;")
+        title.setWordWrap(True)
+        info_layout.addWidget(title)
+        
+        # Quick Stats
+        stats = QLabel(f"<b>Genre:</b> {movie['genre']} &nbsp;|&nbsp; <b>Duration:</b> {movie['duration_minutes']} min &nbsp;|&nbsp; <b>Rating:</b> {movie['rating']}")
+        stats.setStyleSheet("color: #000000; font-size: 13px; margin-bottom: 15px;")
+        info_layout.addWidget(stats)
+        
+        # Full Synopsis
+        synopsis_label = QLabel("<b>📝 Synopsis:</b>")
+        synopsis_label.setStyleSheet("color: #2c3e50; font-size: 14px; margin-top: 10px;")
+        info_layout.addWidget(synopsis_label)
+        
+        synopsis_text = QLabel(movie['synopsis'])
+        synopsis_text.setWordWrap(True)
+        synopsis_text.setStyleSheet("color: #000000; font-size: 13px; line-height: 1.4; margin-bottom: 15px;")
+        info_layout.addWidget(synopsis_text)
+        
+        # Director
+        director_label = QLabel(f"<b>🎬 Director:</b> {movie['director']}")
+        director_label.setStyleSheet("color: #000000; font-size: 13px; margin-bottom: 5px;")
+        info_layout.addWidget(director_label)
+        
+        info_layout.addStretch()
+        info_scroll.setWidget(info_widget)
+        # Give info section about 40% of height
+        layout.addWidget(info_scroll, stretch=4)
+        
+        
+        # --- Showtimes Section ---
+        screenings = self.db.get_screenings(movie['movie_id'])
+        
+        showtimes_label = QLabel("📅 Available Showtimes")
+        showtimes_label.setFont(QFont("Arial", 14, QFont.Weight.Bold))
+        showtimes_label.setStyleSheet("color: #2c3e50; margin-top: 15px;")
+        layout.addWidget(showtimes_label)
+        
         showtimes_list = QListWidget()
-        for screening in screenings:
-            available_seats = screening['available_seats']
-            item_text = f"🏛 {screening['hall_name']} | 🕒 {screening['start_time']} | 💺 {available_seats} seats | 💰 ${screening['ticket_price']}"
-            showtimes_list.addItem(item_text)
+        showtimes_list.setStyleSheet("""
+            QListWidget {
+                border: 1px solid #bdc3c7;
+                border-radius: 5px;
+                padding: 5px;
+            }
+            QListWidget::item {
+                padding: 10px;
+                border-bottom: 1px solid #eee;
+            }
+            QListWidget::item:selected {
+                background-color: #3498db;
+                color: white;
+            }
+        """)
         
-        layout.addWidget(showtimes_list)
+        if screenings:
+            for screening in screenings:
+                available_seats = screening['available_seats']
+                item_text = f"🏛 {screening['hall_name']}  |  🕒 {screening['start_time']}  |  💺 {available_seats} seats left  |  💰 ${screening['ticket_price']}"
+                showtimes_list.addItem(item_text)
+        else:
+            showtimes_list.addItem("No showtimes available currently.")
+            showtimes_list.setEnabled(False)
+            
+        layout.addWidget(showtimes_list, stretch=3)
         
         # Buttons
         button_layout = QHBoxLayout()
         book_btn = QPushButton("🎟 Book Selected Showtime")
-        cancel_btn = QPushButton("Cancel")
+        book_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #27ae60; 
+                color: white; 
+                padding: 10px; 
+                font-weight: bold; 
+                border-radius: 5px;
+            }
+            QPushButton:hover { background-color: #219150; }
+        """)
         
-        book_btn.clicked.connect(lambda: self.book_screening(screenings[showtimes_list.currentRow()], dialog))
-        cancel_btn.clicked.connect(dialog.reject)
+        close_btn = QPushButton("Close")
+        close_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #7f8c8d; 
+                color: white; 
+                padding: 10px; 
+                border-radius: 5px;
+            }
+            QPushButton:hover { background-color: #95a5a6; }
+        """)
+        
+        if screenings:
+            book_btn.clicked.connect(lambda: self.book_screening(screenings[showtimes_list.currentRow()], dialog))
+        else:
+            book_btn.setEnabled(False)
+            book_btn.setStyleSheet("background-color: #bdc3c7; color: white; padding: 10px; border-radius: 5px;")
+            
+        close_btn.clicked.connect(dialog.reject)
         
         button_layout.addWidget(book_btn)
-        button_layout.addWidget(cancel_btn)
+        button_layout.addWidget(close_btn)
         layout.addLayout(button_layout)
         
         dialog.exec()
@@ -402,6 +497,9 @@ class MyBookingsTab(QWidget):
                     status_item.setForeground(Qt.GlobalColor.green)
                 elif booking['status'] == 'refunded':
                     status_item.setForeground(Qt.GlobalColor.blue)
+                elif booking['status'] == 'pending_refund':
+                    status_item.setForeground(Qt.GlobalColor.darkYellow)  # Orange/Dark Yellow for pending
+                    status_item.setText("Pending Refund")
                 elif booking['status'] == 'cancelled':
                     status_item.setForeground(Qt.GlobalColor.red)
                 self.bookings_table.setItem(row_idx, 6, status_item)
@@ -449,176 +547,95 @@ class ProfileTab(QWidget):
     
     def init_ui(self):
         layout = QVBoxLayout()
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        container = QWidget()
+        form_layout = QVBoxLayout(container)
         
         # Title
         title = QLabel("👤 My Profile")
         title.setFont(QFont("Arial", 16, QFont.Weight.Bold))
         title.setStyleSheet("color: #2c3e50; margin: 10px;")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(title)
+        form_layout.addWidget(title)
         
-        # Profile form
-        form_layout = QVBoxLayout()
+        # --- Profile Info (Edit Details) ---
+        info_group = QFrame()
+        info_group.setFrameStyle(QFrame.Shape.StyledPanel)
+        info_group.setStyleSheet("background-color: white; border-radius: 5px; border: 1px solid #ddd; padding: 10px;")
+        info_layout = QFormLayout(info_group)
         
-        # Username (read-only)
         self.username_label = QLabel()
-        form_layout.addWidget(QLabel("Username:"))
-        form_layout.addWidget(self.username_label)
+        self.username_label.setStyleSheet("font-weight: bold; color: #555;")
         
-        # First Name
         self.first_name_input = QLineEdit()
-        form_layout.addWidget(QLabel("First Name *:"))
-        form_layout.addWidget(self.first_name_input)
-        
-        # Last Name
         self.last_name_input = QLineEdit()
-        form_layout.addWidget(QLabel("Last Name *:"))
-        form_layout.addWidget(self.last_name_input)
-        
-        # Email
         self.email_input = QLineEdit()
-        form_layout.addWidget(QLabel("Email *:"))
-        form_layout.addWidget(self.email_input)
-        
-        # Phone
         self.phone_input = QLineEdit()
-        form_layout.addWidget(QLabel("Phone:"))
-        form_layout.addWidget(self.phone_input)
         
-        # Update button
-        self.update_btn = QPushButton("💾 Update Profile")
+        info_layout.addRow("Username:", self.username_label)
+        info_layout.addRow("First Name:", self.first_name_input)
+        info_layout.addRow("Last Name:", self.last_name_input)
+        info_layout.addRow("Email:", self.email_input)
+        info_layout.addRow("Phone:", self.phone_input)
+        
+        self.update_btn = QPushButton("💾 Update Details")
         self.update_btn.clicked.connect(self.update_profile)
-        form_layout.addWidget(self.update_btn)
+        info_layout.addRow(self.update_btn)
         
-        layout.addLayout(form_layout)
-        layout.addStretch()
+        form_layout.addWidget(info_group)
+        
+        # --- Change Password Section ---
+        pass_group = QFrame()
+        pass_group.setFrameStyle(QFrame.Shape.StyledPanel)
+        pass_group.setStyleSheet("background-color: white; border-radius: 5px; border: 1px solid #ddd; padding: 10px; margin-top: 20px;")
+        pass_layout = QFormLayout(pass_group)
+        
+        pass_title = QLabel("🔒 Change Password")
+        pass_title.setFont(QFont("Arial", 12, QFont.Weight.Bold))
+        pass_layout.addRow(pass_title)
+        
+        self.new_password_input = QLineEdit()
+        self.new_password_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.new_password_input.setPlaceholderText("New Password")
+        
+        self.confirm_password_input = QLineEdit()
+        self.confirm_password_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.confirm_password_input.setPlaceholderText("Confirm New Password")
+        
+        pass_layout.addRow("New Password:", self.new_password_input)
+        pass_layout.addRow("Confirm:", self.confirm_password_input)
+        
+        self.change_pass_btn = QPushButton("🔑 Change Password")
+        self.change_pass_btn.clicked.connect(self.change_password)
+        pass_layout.addRow(self.change_pass_btn)
+        
+        form_layout.addWidget(pass_group)
+        form_layout.addStretch()
+        
+        scroll.setWidget(container)
+        layout.addWidget(scroll)
         self.setLayout(layout)
     
     def load_profile(self):
-        import json
-
-        # Try to get customer data (the DB method name suggests a single record may be returned)
-        try:
-            result = self.db.get_customer_name(self.customer_id)
-        except Exception as e:
-            print("load_profile: error calling get_customer_name:", e)
-            result = None
-
-        # Normalise possible return shapes into a single dict 'customer' or None
-        customer = None
-
-        # 1) If DB returned None -> not found
-        if result is None:
-            customer = None
-
-        # 2) If result already a dict (best case)
-        elif isinstance(result, dict):
-            customer = result
-
-        # 3) If result is a list/tuple of rows
-        elif isinstance(result, (list, tuple)):
-            # If it's a list of rows and first element is dict, pick the first matching one
-            if len(result) == 0:
-                customer = None
-            else:
-                first = result[0]
-                if isinstance(first, dict):
-                    # If it's a list of dicts, try to find the one with matching id
-                    try:
-                        target_id = int(self.customer_id)
-                    except Exception:
-                        target_id = self.customer_id
-                    # try by common keys
-                    customer = next(
-                        (c for c in result if (
-                            ('customer_id' in c and str(c['customer_id']) == str(target_id))
-                            or ('id' in c and str(c['id']) == str(target_id))
-                        )), 
-                        None
-                    )
-                    # fallback to first element if not found
-                    if not customer:
-                        customer = first
-                else:
-                    # It's a list/tuple of tuples (e.g. cursor.fetchall()). Assume a common column order:
-                    # (customer_id, first_name, last_name, email, phone_number)
-                    # If your DB returns different order, change the indices below.
-                    row = first
-                    # If the fetch returned multiple rows, try to find matching id
-                    try:
-                        target_id = str(int(self.customer_id))
-                    except Exception:
-                        target_id = str(self.customer_id)
-
-                    found = None
-                    for r in result:
-                        if not isinstance(r, (list, tuple)):
-                            continue
-                        if len(r) > 0 and str(r[0]) == target_id:
-                            found = r
-                            break
-                    if not found:
-                        found = row  # fallback to first row
-
-                    # Map tuple -> dict (adjust indices if your SELECT order differs)
-                    customer = {
-                        'customer_id': found[0] if len(found) > 0 else None,
-                        'first_name': found[1] if len(found) > 1 else '',
-                        'last_name': found[2] if len(found) > 2 else '',
-                        'email': found[3] if len(found) > 3 else '',
-                        'phone_number': found[4] if len(found) > 4 else ''
-                    }
-
-        # 4) If result is a JSON string
-        elif isinstance(result, str):
-            try:
-                parsed = json.loads(result)
-                # parsed could be dict or list; reuse logic by recursion-like assignment
-                if isinstance(parsed, dict):
-                    customer = parsed
-                elif isinstance(parsed, (list, tuple)) and parsed:
-                    first = parsed[0]
-                    if isinstance(first, dict):
-                        customer = first
-                    elif isinstance(first, (list, tuple)):
-                        found = parsed[0]
-                        customer = {
-                            'customer_id': found[0] if len(found) > 0 else None,
-                            'first_name': found[1] if len(found) > 1 else '',
-                            'last_name': found[2] if len(found) > 2 else '',
-                            'email': found[3] if len(found) > 3 else '',
-                            'phone_number': found[4] if len(found) > 4 else ''
-                        }
-            except Exception:
-                # Not JSON — maybe it's a single username string; treat as missing structured data
-                customer = None
-
-        else:
-            # Unknown type: convert to string and try to match (unlikely)
-            try:
-                s = str(result)
-                customer = None
-            except Exception:
-                customer = None
-
-        # --- Use the normalized 'customer' dict or handle not-found ---
-        if not customer:
-            # No customer found — clear fields or set defaults
-            print(f"load_profile: no customer found for id: {self.customer_id}")
-            self.username_label.setText(self.user_data.get('username', '') if isinstance(self.user_data, dict) else "")
-            self.first_name_input.setText("")
-            self.last_name_input.setText("")
-            self.email_input.setText("")
-            self.phone_input.setText("")
+        profile = self.db.get_customer_profile(self.customer_id)
+        
+        if not profile:
+            # Fallback to user_data if db fetch fails (though it shouldn't)
+            print(f"load_profile: full profile fetch failed for id: {self.customer_id}")
+            if self.user_data:
+                self.username_label.setText(self.user_data.get('username', ''))
+                self.first_name_input.setText(self.user_data.get('first_name', ''))
+                self.last_name_input.setText(self.user_data.get('last_name', ''))
+                self.email_input.setText(self.user_data.get('email', ''))
+                self.phone_input.setText(self.user_data.get('phone', ''))
             return
 
-        # Fill UI fields safely using .get to avoid KeyError
-        self.username_label.setText(self.user_data.get('username', '') if isinstance(self.user_data, dict) else "")
-        self.first_name_input.setText(str(customer.get('first_name', '')))
-        self.last_name_input.setText(str(customer.get('last_name', '')))
-        self.email_input.setText(str(customer.get('email', '')))
-        self.phone_input.setText(str(customer.get('phone_number', '') or ""))
-
+        self.username_label.setText(str(profile.get('username', '')))
+        self.first_name_input.setText(str(profile.get('first_name', '')))
+        self.last_name_input.setText(str(profile.get('last_name', '')))
+        self.email_input.setText(str(profile.get('email', '')))
+        self.phone_input.setText(str(profile.get('phone_number', '') or ''))
     
     def update_profile(self):
         first_name = self.first_name_input.text().strip()
@@ -634,3 +651,26 @@ class ProfileTab(QWidget):
             QMessageBox.information(self, "Success", "Profile updated successfully!")
         else:
             QMessageBox.critical(self, "Error", "Failed to update profile!")
+
+    def change_password(self):
+        new_pass = self.new_password_input.text()
+        confirm_pass = self.confirm_password_input.text()
+        
+        if not new_pass:
+            QMessageBox.warning(self, "Error", "Please enter a new password")
+            return
+            
+        if len(new_pass) < 6:
+            QMessageBox.warning(self, "Error", "Password must be at least 6 characters")
+            return
+            
+        if new_pass != confirm_pass:
+            QMessageBox.warning(self, "Error", "Passwords do not match")
+            return
+            
+        if self.db.update_password(self.customer_id, new_pass):
+            QMessageBox.information(self, "Success", "Password changed successfully!")
+            self.new_password_input.clear()
+            self.confirm_password_input.clear()
+        else:
+            QMessageBox.critical(self, "Error", "Failed to change password!")

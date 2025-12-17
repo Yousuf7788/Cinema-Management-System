@@ -10,6 +10,7 @@ from booking_tab import BookingTab
 from screening_tab import ScreeningTab
 from movie_tab import MovieTab
 import datetime
+import traceback
 
 class EmployeeDashboard(QWidget):
     logout_signal = pyqtSignal()
@@ -28,12 +29,31 @@ class EmployeeDashboard(QWidget):
             self.db = db
             self.user_data = user_data
             self.current_user = user_data
+            self.is_manager = bool(self.current_user and (
+            self.current_user.get('role') in ('manager', 'admin') or
+            self.current_user.get('user_type') in ('manager', 'admin') or
+            self.current_user.get('is_manager') or
+            self.current_user.get('is_admin')
+        ))
+            print("DEBUG current_user:", self.current_user)
 
             # safely extract fields (use .get to avoid KeyError)
+            # store employee id
             self.employee_id = user_data.get('employee_id')
-            # normalize user_type to a string if present
+
+            # check user_type too but DO NOT overwrite a True detection from earlier;
+            # only set to True if we already detected manager OR user_type explicitly says 'manager'
             user_type = user_data.get('user_type')
-            self.is_manager = (str(user_type).lower() == 'manager') if user_type is not None else False
+            if user_type is not None:
+                try:
+                    if str(user_type).strip().lower() == 'manager':
+                        self.is_manager = True
+                except Exception:
+                    pass
+
+            # optional debug print to confirm final value
+            print("DEBUG is_manager:", self.is_manager)
+
 
             # continue initialization
             self.init_ui()
@@ -86,8 +106,15 @@ class EmployeeDashboard(QWidget):
         
         # Screening Management Tab (MANAGER ONLY)
         if self.is_manager:
-            self.screening_tab = ScreeningTab(self.db)
+            self.screening_tab = ScreeningTab(self.db, is_manager=True)
             self.tabs.addTab(self.screening_tab, "📅 Screenings")
+            
+        # Payment Management Tab (Admin/Manager)
+        # Assuming all employees can see payments? User request said 'employee dashboard'.
+        # Let's add it for all employees for now, or check permissions.
+        from payment_tab import PaymentTab
+        self.payment_tab = PaymentTab(self.db, user_data=self.user_data)
+        self.tabs.addTab(self.payment_tab, "💳 Payments")
         
         layout.addWidget(self.tabs)
         self.setLayout(layout)
@@ -353,6 +380,17 @@ class MovieManagementTab(QWidget):
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
         
+        # Search Bar
+        search_layout = QHBoxLayout()
+        search_layout.addWidget(QLabel("🔍 Search Movies:"))
+        
+        from PyQt6.QtWidgets import QLineEdit
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Filter by title, genre, or director...")
+        self.search_input.textChanged.connect(self.filter_movies)
+        search_layout.addWidget(self.search_input)
+        layout.addLayout(search_layout)
+        
         # Movies table
         self.movie_table = QTableWidget()
         self.movie_table.setAlternatingRowColors(True)
@@ -387,6 +425,40 @@ class MovieManagementTab(QWidget):
         layout.addLayout(button_layout)
         self.setLayout(layout)
     
+    # paste this inside your MovieManagementTab class
+    def show_error_message(self, title: str, message: str):
+        """
+        Show a critical error message box and also print the error to the terminal for debugging.
+        Replace any older implementation with this one.
+        """
+        # Print to terminal so you always see the error even if the dialog text is hidden
+        print(f"[ERROR] {title}: {message}")
+        # also print a short traceback so we can see where it came from
+        traceback.print_stack(limit=5)
+
+        # Show a visible QMessageBox
+        msg = QMessageBox(self)
+        msg.setWindowTitle(title or "Error")
+        msg.setIcon(QMessageBox.Icon.Critical)
+
+        # Ensure main text + informative text are set (some themes hide one or the other)
+        msg.setText(message or "An error occurred.")
+        # put extra details in informative text (helps if UI hides main text)
+        msg.setInformativeText("See terminal/console for details.")
+
+        # Ensure any odd stylesheet doesn't hide text (safe to include)
+        msg.setStyleSheet("")
+
+        msg.setStandardButtons(QMessageBox.StandardButton.Ok)
+        msg.exec()
+
+    def show_success_message(self, title: str, message: str):
+        """Show an information/success message box."""
+        QMessageBox.information(self, title or "Success", message or "Done.")
+
+    def show_info_message(self, title: str, message: str):
+        """Show a general info message box."""
+        QMessageBox.information(self, title or "Info", message or "")
     def load_movies(self):
         movies = self.db.get_movies()
         
@@ -417,10 +489,50 @@ class MovieManagementTab(QWidget):
         if not self.is_manager:
             QMessageBox.warning(self, "Access Denied", "Only managers can add movies!")
             return
+            
+        # 1. Get Title/Genre etc first? 
+        # The 'get_movie_details_dialog' only gets DETAILS (director, cast etc).
+        # We need a basic input dialog for Title, Genre, Duration, Rating first, OR update get_movie_details_dialog to include them.
+        # Looking at movie_tab.py, add_record gets title/genre from the FORM on the page, then asks for details.
         
-        dialog = MovieTab.get_movie_details_dialog(self, self.db)
-        if dialog.exec():
+        # Since MovieManagementTab doesn't have a form, we need a full input mechanism.
+        # Use a custom dialog or expand get_movie_details_dialog. For now, let's create a simple sequence.
+        
+        # 1. Get Basic Info
+        title, ok1 = QInputDialog.getText(self, "Add Movie", "Movie Title:")
+        if not ok1 or not title: return
+        
+        genre, ok2 = QInputDialog.getText(self, "Add Movie", "Genre:")
+        if not ok2: return
+        
+        duration, ok3 = QInputDialog.getInt(self, "Add Movie", "Duration (minutes):", 120, 1, 999)
+        if not ok3: return
+        
+        rating, ok4 = QInputDialog.getItem(self, "Add Movie", "Rating:", ["G", "PG", "PG-13", "R", "NC-17"], 0, False)
+        if not ok4: return
+        
+        # 2. Get Details
+        movie_data = MovieTab.get_movie_details_dialog(self, db=self.db)
+        if not movie_data: return
+        
+        # 3. Insert into DB
+        success = self.db.add_movie(
+            title=title,
+            genre=genre,
+            duration=duration,
+            rating=rating,
+            director=movie_data['director'],
+            cast=movie_data['cast'],
+            synopsis=movie_data['synopsis'],
+            release_date=movie_data['release_date']
+        )
+        
+        if success:
+            self.show_success_message("Success", "Movie added successfully!")
             self.load_movies()
+        else:
+            self.show_error_message("Error", "Failed to add movie.")
+            
     
     def edit_movie(self):
         selected_items = self.movie_table.selectedItems()
@@ -433,43 +545,98 @@ class MovieManagementTab(QWidget):
             return
         
         movie_id = int(self.movie_table.item(selected_items[0].row(), 0).text())
-        dialog = MovieTab.get_movie_details_dialog(self, self.db, movie_id)
-        if dialog.exec():
-            self.load_movies()
+        # Call with explicit kwargs to handle the signature (self, parent=None, db=None, movie_id=None)
+        # We pass 'self' as the instance, so 'parent' defaults to None (which falls back to 'self' inside the method)
+        movie_data = MovieTab.get_movie_details_dialog(self, db=self.db, movie_id=movie_id)
+        
+        if movie_data:
+            try:
+                cursor = self.db.connection.cursor()
+                cursor.execute("""
+                    UPDATE Movie_Details 
+                    SET director = ?, cast = ?, synopsis = ?, release_date = ?
+                    WHERE movie_id = ?
+                """, (
+                    movie_data['director'], 
+                    movie_data['cast'], 
+                    movie_data['synopsis'], 
+                    movie_data['release_date'], 
+                    movie_id
+                ))
+                self.db.connection.commit()
+                self.show_success_message("Success", "Movie details updated successfully!")
+                self.load_movies()
+            except Exception as e:
+                self.show_error_message("Update Error", f"Failed to update movie details: {str(e)}")
     
     def delete_movie(self):
-        selected_items = self.movie_table.selectedItems()
-        if not selected_items:
-            QMessageBox.warning(self, "Selection Required", "Please select a movie to delete!")
+        if not self.is_manager:
+            self.show_error_message("Access Denied", "Only managers can delete movies!")
             return
         
-        if not self.is_manager:
-            QMessageBox.warning(self, "Access Denied", "Only managers can delete movies!")
+        selected_items = self.movie_table.selectedItems()
+        if not selected_items:
+            self.show_error_message("Error", "Please select a movie to delete!")
             return
         
         movie_id = int(self.movie_table.item(selected_items[0].row(), 0).text())
         movie_title = self.movie_table.item(selected_items[0].row(), 1).text()
-        
-        reply = QMessageBox.question(
-            self, "Confirm Delete", 
-            f"Are you sure you want to delete '{movie_title}'?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-        )
-        
-        if reply == QMessageBox.StandardButton.Yes:
-            # Check if movie has screenings
-            screenings = self.db.get_screenings(movie_id)
-            if screenings:
-                QMessageBox.warning(
-                    self, "Cannot Delete", 
-                    f"Cannot delete '{movie_title}' because it has {len(screenings)} scheduled screening(s)."
-                )
-                return
-            
-            # Delete movie
-            if self.db.execute_query("DELETE FROM Movie WHERE movie_id = ?", (movie_id,))[0]:
-                QMessageBox.information(self, "Success", "Movie deleted successfully!")
-                self.load_movies()
-            else:
-                QMessageBox.critical(self, "Error", "Failed to delete movie!")
 
+        
+        
+        # Check if movie has screenings
+        screenings = self.db.get_screenings(movie_id)
+        if screenings:
+            self.show_error_message("Cannot Delete", f"Movie cannot be deleted because it has {len(screenings)} scheduled screenings.\nPlease remove all screenings for this movie first.")
+            return
+        
+        if self.confirm_action("Confirm Delete", f"Are you sure you want to delete '{movie_title}'?"):
+            try:
+                cur = self.db.connection.cursor()
+
+                # 1) Delete Movie_Details (if present)
+                cur.execute("DELETE FROM Movie_Details WHERE movie_id = ?", (movie_id,))
+                details_deleted = cur.rowcount  # number of rows removed from Movie_Details
+
+                # 2) Delete Movie
+                cur.execute("DELETE FROM Movie WHERE movie_id = ?", (movie_id,))
+                movies_deleted = cur.rowcount  # number of rows removed from Movie
+
+                # 3) Commit the transaction
+                self.db.connection.commit()
+
+                # 4) Check results and show clear messages
+                if movies_deleted > 0:
+                    self.show_success_message("Success", f"Movie '{movie_title}' deleted successfully! "
+                                                         f"({movies_deleted} movie row(s) deleted, "
+                                                         f"{details_deleted} detail row(s) deleted)")
+                    self.clear_form()
+                    self.load_data()
+                else:
+                    # No movie row deleted — either wrong ID or FK prevented deletion
+                    self.show_error_message(
+                        "Error",
+                        f"No movie was deleted for id={movie_id}. This usually means the movie id was not found "
+                        f"or a foreign-key prevented deletion. Deleted detail rows: {details_deleted}"
+                    )
+
+            except Exception as e:
+                # Roll back on error and show the exception so it's visible
+                try:
+                    self.db.connection.rollback()
+                except Exception:
+                    pass
+                self.show_error_message("Error", f"Failed to delete movie: {e}")
+                
+    def filter_movies(self, text):
+        """Filter movie table based on search text"""
+        text = text.lower()
+        for row in range(self.movie_table.rowCount()):
+            match = False
+            # Check Title (1), Genre (2), Director (5)
+            for col in [1, 2, 5]:
+                item = self.movie_table.item(row, col)
+                if item and text in item.text().lower():
+                    match = True
+                    break
+            self.movie_table.setRowHidden(row, not match)

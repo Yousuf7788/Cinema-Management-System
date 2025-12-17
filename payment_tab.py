@@ -1,5 +1,5 @@
 # payment_tab.py - INTEGRATED VERSION
-from PyQt6.QtWidgets import QTableWidgetItem, QMessageBox, QHeaderView
+from PyQt6.QtWidgets import QTableWidgetItem, QMessageBox, QHeaderView, QPushButton
 from PyQt6.QtCore import QDateTime
 from PyQt6.QtGui import QColor
 from ui_payment_tab import Ui_PaymentTab
@@ -21,7 +21,61 @@ class PaymentTab(BaseTab, Ui_PaymentTab):
         self.connect_signals()
         self.setup_form()
         self.load_dynamic_data()
+        self.load_dynamic_data()
         self.load_data()
+        
+        # Add dynamic Approve button
+        # Try to find layout of existing buttons
+        layout = None
+        if hasattr(self, 'addPaymentBtn') and self.addPaymentBtn.parent():
+            layout = self.addPaymentBtn.parent().layout()
+            
+        if layout:
+            self.approve_btn = QPushButton("✅ Approve Payment")
+            self.approve_btn.clicked.connect(self.approve_payment)
+            layout.addWidget(self.approve_btn)
+    
+    def approve_payment(self):
+        """Approve a pending payment"""
+        selected_items = self.paymentTable.selectedItems()
+        if not selected_items:
+            self.show_error_message("Error", "Please select a payment to approve!")
+            return
+            
+        row = selected_items[0].row()
+        payment_id = int(self.paymentTable.item(row, 0).text())
+        current_status = self.paymentTable.item(row, 5).text().lower()
+        booking_id_item = self.paymentTable.item(row, 2) # Wait, col 2 is Movie title in load_data...
+        # I need booking_id. load_data query selects payment_id, customer, movie... 
+        # It doesn't put booking_id in table explicitly visibly?
+        # Let's check load_data.
+        # Query: SELECT p.payment_id, ... 
+        # I might need to fetch booking_id.
+        # Alternatively, execute query to get booking_id from payment_id.
+        
+        if current_status == 'completed':
+            self.show_error_message("Info", "Payment is already completed.")
+            return
+
+        if self.confirm_action("Approve Payment", "Approve this payment and confirm the booking?"):
+             # Get booking_id first
+             b_query = "SELECT booking_id FROM Payment WHERE payment_id = ?"
+             s, r, e = self.execute_query(b_query, (payment_id,), fetch=True)
+             if s and r:
+                 booking_id = r[0][0]
+                 
+                 # Update Payment
+                 p_query = "UPDATE Payment SET payment_status = 'completed' WHERE payment_id = ?"
+                 self.execute_query(p_query, (payment_id,))
+                 
+                 # Update Booking
+                 b_update = "UPDATE Booking SET status = 'confirmed' WHERE booking_id = ?"
+                 self.execute_query(b_update, (booking_id,))
+                 
+                 self.show_success_message("Success", "Payment approved and booking confirmed!")
+                 self.load_data()
+             else:
+                 self.show_error_message("Error", "Could not find associated booking.")
     
     def connect_signals(self):
         """Connect UI signals to methods"""
@@ -193,7 +247,8 @@ class PaymentTab(BaseTab, Ui_PaymentTab):
             
             # Update booking status if payment is completed
             if payment_status == 'completed':
-                update_booking_query = "UPDATE Booking SET status = 'confirmed' WHERE booking_id = ?"
+                # Move to 'pending_approval' instead of 'confirmed'
+                update_booking_query = "UPDATE Booking SET status = 'pending_approval' WHERE booking_id = ?"
                 self.execute_query(update_booking_query, (booking_id,))
             
             self.clear_form()

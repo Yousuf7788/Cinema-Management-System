@@ -67,25 +67,30 @@ class Database:
             cursor = self.connection.cursor()
             
             # Check if username or email already exists
-            cursor.execute("SELECT user_id FROM Users WHERE username = ? OR email = ?", username, email)
+            cursor.execute("SELECT user_id FROM Users WHERE username = ? OR email = ?", (username, email))
             if cursor.fetchone():
                 return False
             
-            # Insert into Customer table
-            cursor.execute(
-                "INSERT INTO Customer (first_name, last_name, email, phone_number) OUTPUT INSERTED.customer_id VALUES (?, ?, ?, ?)",
-                first_name, last_name, email, phone
-            )
-            customer_id = cursor.fetchone()[0]
-            
-            # Insert into Users table
-# Insert into Users table (store plaintext password)
+            # Insert into Users table first (customer_id NULL initially)
+            # Insert into Users table (store plaintext password)
             plain_password = self.hash_password(password)  # now returns plaintext
             cursor.execute(
-                "INSERT INTO Users (username, password_hash, email, user_type, customer_id) VALUES (?, ?, ?, ?, ?)",
-                username, plain_password, email, user_type, customer_id
+                "INSERT INTO Users (username, password_hash, email, user_type) OUTPUT INSERTED.user_id VALUES (?, ?, ?, ?)",
+                username, plain_password, email, user_type
             )
-
+            user_id = cursor.fetchone()[0]
+            
+            # Insert into Customer table using user_id as customer_id
+            cursor.execute(
+                "INSERT INTO Customer (customer_id, first_name, last_name, phone_number) VALUES (?, ?, ?, ?)",
+                user_id, first_name, last_name, phone
+            )
+            
+            # Update Users table to link back to customer_id (which is same as user_id)
+            cursor.execute(
+                "UPDATE Users SET customer_id = ? WHERE user_id = ?",
+                user_id, user_id
+            )
             
             self.connection.commit()
             return True
@@ -105,7 +110,7 @@ class Database:
             cursor = self.connection.cursor()
             cursor.execute(
                 """SELECT u.user_id, u.username, u.password_hash, u.user_type, u.customer_id, u.employee_id,
-                        c.first_name, c.last_name, c.email, c.phone_number,
+                        c.first_name, c.last_name, u.email, c.phone_number,
                         e.first_name as emp_first_name, e.last_name as emp_last_name, e.position
                 FROM Users u 
                 LEFT JOIN Customer c ON u.customer_id = c.customer_id
@@ -207,17 +212,25 @@ class Database:
             query = """
                 SELECT s.screening_id, s.movie_id, s.hall_id, s.start_time, s.end_time, s.ticket_price,
                        m.title, mh.hall_name, mh.capacity,
-                       (SELECT COUNT(*) FROM Seat WHERE hall_id = s.hall_id) - 
-                       (SELECT COUNT(*) FROM Booking_Seat bs 
-                        JOIN Booking b ON bs.booking_id = b.booking_id 
-                        WHERE b.screening_id = s.screening_id AND b.status = 'confirmed') as available_seats
+                       CASE 
+                           WHEN (SELECT COUNT(*) FROM Seat WHERE hall_id = s.hall_id) > 0 THEN
+                               (SELECT COUNT(*) FROM Seat WHERE hall_id = s.hall_id) - 
+                               (SELECT COUNT(*) FROM Booking_Seat bs 
+                                JOIN Booking b ON bs.booking_id = b.booking_id 
+                                WHERE b.screening_id = s.screening_id AND b.status IN ('confirmed', 'pending_refund'))
+                           ELSE
+                               mh.capacity - 
+                               (SELECT COUNT(*) FROM Booking_Seat bs 
+                                JOIN Booking b ON bs.booking_id = b.booking_id 
+                                WHERE b.screening_id = s.screening_id AND b.status IN ('confirmed', 'pending_refund'))
+                       END as available_seats
                 FROM Screening s
                 JOIN Movie m ON s.movie_id = m.movie_id
                 JOIN Movie_Hall mh ON s.hall_id = mh.hall_id
             """
             if movie_id:
                 query += " WHERE s.movie_id = ?"
-                cursor.execute(query, movie_id)
+                cursor.execute(query, (movie_id,))
             else:
                 cursor.execute(query)
             
@@ -238,7 +251,7 @@ class Database:
                     SELECT bs.seat_id 
                     FROM Booking_Seat bs
                     JOIN Booking b ON bs.booking_id = b.booking_id
-                    WHERE b.screening_id = ? AND b.status = 'confirmed'
+                    WHERE b.screening_id = ? AND b.status IN ('confirmed', 'pending_refund')
                 )
             """, screening_id, screening_id)
             
@@ -247,28 +260,33 @@ class Database:
             self.logger.error(f"Error fetching available seats: {e}")
             return []
     
-    def create_booking(self, customer_id: int, screening_id: int, seat_ids: List[int], total_amount: float) -> Optional[int]:
+    def create_booking(self, customer_id: int, screening_id: int, seat_ids: List[int], total_amount: float, status: str = 'confirmed', payment_method: str = 'Credit Card', payment_status: str = 'completed') -> Optional[int]:
         try:
             cursor = self.connection.cursor()
             
-            # Create booking
-            cursor.execute(
-                "INSERT INTO Booking (customer_id, screening_id, total_amount, status) OUTPUT INSERTED.booking_id VALUES (?, ?, ?, 'confirmed')",
-                customer_id, screening_id, total_amount
-            )
+            # Start transaction
+            cursor.execute("BEGIN TRANSACTION")
+            
+            # 1. Create Booking
+            cursor.execute("""
+                INSERT INTO Booking (customer_id, screening_id, booking_date, total_amount, status)
+                OUTPUT INSERTED.booking_id
+                VALUES (?, ?, GETDATE(), ?, ?)
+            """, (customer_id, screening_id, total_amount, status))
+            
             booking_id = cursor.fetchone()[0]
             
-            # Link seats to booking
+            # 2. Link Seats
             for seat_id in seat_ids:
-                cursor.execute(
-                    "INSERT INTO Booking_Seat (booking_id, seat_id) VALUES (?, ?)",
-                    booking_id, seat_id
-                )
+                cursor.execute("""
+                    INSERT INTO Booking_Seat (booking_id, seat_id)
+                    VALUES (?, ?)
+                """, (booking_id, seat_id))
             
             # Create payment
             cursor.execute(
-                "INSERT INTO Payment (booking_id, amount, payment_method, payment_status) VALUES (?, ?, 'Credit Card', 'completed')",
-                booking_id, total_amount
+                "INSERT INTO Payment (booking_id, amount, payment_method, payment_status, payment_date) VALUES (?, ?, ?, ?, GETDATE())",
+                (booking_id, total_amount, payment_method, payment_status)
             )
             
             self.connection.commit()
@@ -291,13 +309,14 @@ class Database:
                     b.status,
                     c.first_name AS customer_first_name,
                     c.last_name AS customer_last_name,
-                    c.email AS customer_email,
+                    u.email AS customer_email,
                     m.title AS movie_title,
                     s.start_time,
                     mh.hall_name,
                     STRING_AGG(CONCAT(seat.row_letter, seat.seat_number), ', ') AS seats
                 FROM Booking b
                 JOIN Customer c ON b.customer_id = c.customer_id
+                JOIN Users u ON c.customer_id = u.customer_id
                 JOIN Screening s ON b.screening_id = s.screening_id
                 JOIN Movie m ON s.movie_id = m.movie_id
                 JOIN Movie_Hall mh ON s.hall_id = mh.hall_id
@@ -310,7 +329,7 @@ class Database:
                     b.status,
                     c.first_name,
                     c.last_name,
-                    c.email,
+                    u.email,
                     m.title,
                     s.start_time,
                     mh.hall_name
@@ -356,7 +375,7 @@ class Database:
             cursor = self.connection.cursor()
             
             # Get payment ID for the booking
-            cursor.execute("SELECT payment_id FROM Payment WHERE booking_id = ?", booking_id)
+            cursor.execute("SELECT payment_id FROM Payment WHERE booking_id = ?", (booking_id,))
             payment = cursor.fetchone()
             if not payment:
                 return False
@@ -367,8 +386,8 @@ class Database:
                 payment[0], 0, reason  # Amount will be updated by employee
             )
             
-            # Update booking status
-            cursor.execute("UPDATE Booking SET status = 'refunded' WHERE booking_id = ?", booking_id)
+            # Update booking status to 'pending_refund' instead of 'refunded'
+            cursor.execute("UPDATE Booking SET status = 'pending_refund' WHERE booking_id = ?", (booking_id,))
             
             self.connection.commit()
             return True
@@ -426,11 +445,46 @@ class Database:
             cursor = self.connection.cursor()
             
             if status == 'approved' and refund_amount:
+                # Update refund status
                 cursor.execute(
                     "UPDATE Refund SET status = ?, processed_by_employee_id = ?, refund_amount = ? WHERE refund_id = ?",
                     status, employee_id, refund_amount, refund_id
                 )
+                
+                # Update booking status to REFUNDED using subquery
+                cursor.execute("""
+                    UPDATE Booking 
+                    SET status = 'refunded' 
+                    WHERE booking_id = (
+                        SELECT b.booking_id 
+                        FROM Booking b
+                        JOIN Payment p ON b.booking_id = p.booking_id
+                        JOIN Refund r ON p.payment_id = r.payment_id
+                        WHERE r.refund_id = ?
+                    )
+                """, (refund_id,))
+                        
+            elif status == 'rejected':
+                # Update refund status
+                cursor.execute(
+                    "UPDATE Refund SET status = ?, processed_by_employee_id = ? WHERE refund_id = ?",
+                    status, employee_id, refund_id
+                )
+                
+                # Revert booking status to CONFIRMED using subquery
+                cursor.execute("""
+                    UPDATE Booking 
+                    SET status = 'confirmed' 
+                    WHERE booking_id = (
+                        SELECT b.booking_id 
+                        FROM Booking b
+                        JOIN Payment p ON b.booking_id = p.booking_id
+                        JOIN Refund r ON p.payment_id = r.payment_id
+                        WHERE r.refund_id = ?
+                    )
+                """, (refund_id,))
             else:
+                # Handle other statuses if necessary, or just fallback update
                 cursor.execute(
                     "UPDATE Refund SET status = ?, processed_by_employee_id = ? WHERE refund_id = ?",
                     status, employee_id, refund_id
@@ -484,33 +538,87 @@ class Database:
             self.connection.rollback()
             return False
     
-    def get_customer_name(self, customer_id: int) -> str:
-        """Get customer name by ID"""
+    def update_customer(self, customer_id: int, first_name: str, last_name: str, email: str, phone: str) -> bool:
         try:
             cursor = self.connection.cursor()
+            
+            # Update Customer table
             cursor.execute(
-                "SELECT first_name + ' ' + last_name FROM Customer WHERE customer_id = ?",
-                customer_id
+                "UPDATE Customer SET first_name = ?, last_name = ?, phone_number = ? WHERE customer_id = ?",
+                first_name, last_name, phone, customer_id
             )
-            result = cursor.fetchone()
-            return result[0] if result else "Unknown Customer"
+            
+            # Update Users table (email)
+            cursor.execute(
+                "UPDATE Users SET email = ? WHERE customer_id = ?",
+                email, customer_id
+            )
+            
+            self.connection.commit()
+            return True
         except Exception as e:
-            self.logger.error(f"Error getting customer name: {e}")
-            return "Unknown Customer"
+            self.logger.error(f"Error updating customer: {e}")
+            self.connection.rollback()
+            return False
+
+    def update_password(self, customer_id: int, new_password: str) -> bool:
+        try:
+            cursor = self.connection.cursor()
+            
+            # Note: Storing plaintext as per existing pattern (though insecure)
+            plain_password = self.hash_password(new_password)
+            
+            cursor.execute(
+                "UPDATE Users SET password_hash = ? WHERE customer_id = ?",
+                plain_password, customer_id
+            )
+            
+            self.connection.commit()
+            return True
+        except Exception as e:
+            self.logger.error(f"Error updating password: {e}")
+            self.connection.rollback()
+            return False
+        
+    def get_customer_profile(self, customer_id: int) -> Optional[Dict[str, Any]]:
+        """Get full customer profile including email from Users table"""
+        try:
+            cursor = self.connection.cursor()
+            cursor.execute("""
+                SELECT c.customer_id, c.first_name, c.last_name, c.phone_number, u.email, u.username
+                FROM Customer c
+                JOIN Users u ON c.customer_id = u.customer_id
+                WHERE c.customer_id = ?
+            """, customer_id)
+            
+            row = cursor.fetchone()
+            if row:
+                return {
+                    'customer_id': row[0],
+                    'first_name': row[1],
+                    'last_name': row[2],
+                    'phone_number': row[3],
+                    'email': row[4],
+                    'username': row[5]
+                }
+            return None
+        except Exception as e:
+            self.logger.error(f"Error getting customer profile: {e}")
+            return None
         
     def init_database(self):
         server = "localhost"  # Change to your SQL Server instance
         database = "CinemaDB"  # Your database name
         
         # Option 1: Windows Authentication (recommended)
-        if self.db.connect(server, database):
+        if self.connect(server, database):
             return True
         
         # Option 2: SQL Server Authentication
         username = "sa"  # Your SQL Server username
         password = "YourPassword123"  # Your SQL Server password
-        if self.db.connect(server, database, username, password):
+        if self.connect(server, database, username, password):
             return True
         
-        self.show_db_error()
+        print("Failed to initialize database connection")
         return False

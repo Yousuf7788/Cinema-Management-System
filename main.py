@@ -220,12 +220,26 @@ class MainApplication(QMainWindow):
             QMainWindow {
                 background-color: #ecf0f1;
             }
+            QLabel, QSpinBox, QDoubleSpinBox, QComboBox {
+                color: #000000;
+            }
+            QLineEdit, QTextEdit, QPlainTextEdit {
+                color: white;
+                background-color: #2c3e50;
+                border: 1px solid #bdc3c7;
+                border-radius: 4px;
+                padding: 4px;
+            }
             QMessageBox {
                 background-color: white;
             }
+            QMessageBox QLabel {
+                color: #000000;
+                background-color: transparent;
+            }
             QMessageBox QPushButton {
                 background-color: #3498db;
-                color: white;
+                color: white; /* Keep buttons white text on blue background for readability */
                 border: none;
                 border-radius: 5px;
                 padding: 8px 15px;

@@ -67,7 +67,7 @@ class BaseTab(QWidget):
                 return self.db.execute_query(query, params, fetch)
             else:
                 # Fallback to direct database connection
-                cursor = self.db.cursor()
+                cursor = self.db.connection.cursor()
                 if params:
                     cursor.execute(query, params)
                 else:
@@ -77,7 +77,8 @@ class BaseTab(QWidget):
                     result = cursor.fetchall()
                 else:
                     result = None
-                    self.db.commit()
+                    result = None
+                    self.db.connection.commit()
                 
                 cursor.close()
                 return True, result, None

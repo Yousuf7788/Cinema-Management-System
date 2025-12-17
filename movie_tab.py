@@ -136,13 +136,24 @@ class MovieTab(BaseTab, Ui_MovieTab):
         else:
             self.show_error_message("Error", "Failed to add movie. It may already exist.")
     
-    def get_movie_details_dialog(self):
+    def get_movie_details_dialog(self, parent=None, db=None, movie_id=None):
         """Show dialog to get detailed movie information"""
-        dialog = QDialog(self)
+        dialog = QDialog(parent or self)
         dialog.setWindowTitle("Movie Details")
         dialog.setModal(True)
         dialog.setFixedSize(500, 400)
         
+        # Pre-fetch data if movie_id provided
+        current_data = {}
+        if db and movie_id:
+            try:
+                # We need to fetch details. get_movies joins with details, so we can use that for now.
+                # In a more optimized app, we'd have a specific get_movie_details method.
+                movies = db.get_movies()
+                current_data = next((m for m in movies if m['movie_id'] == movie_id), {})
+            except Exception as e:
+                print(f"Error fetching movie details: {e}")
+
         layout = QVBoxLayout(dialog)
         
         form_layout = QFormLayout()
@@ -166,7 +177,15 @@ class MovieTab(BaseTab, Ui_MovieTab):
         from PyQt6.QtWidgets import QLineEdit
         release_input = QLineEdit()
         release_input.setPlaceholderText("YYYY-MM-DD")
-        release_input.setText("2024-01-01")
+        
+        # Pre-fill data
+        if current_data:
+            director_input.setPlainText(current_data.get('director', ''))
+            cast_input.setPlainText(current_data.get('cast', ''))
+            synopsis_input.setPlainText(current_data.get('synopsis', ''))
+            release_input.setText(str(current_data.get('release_date', '')))
+        else:
+            release_input.setText("2024-01-01")
         
         form_layout.addRow("Director:", director_input)
         form_layout.addRow("Cast:", cast_input)
@@ -235,6 +254,8 @@ class MovieTab(BaseTab, Ui_MovieTab):
         
         movie_id = int(self.movieTable.item(selected_items[0].row(), 0).text())
         movie_title = self.movieTable.item(selected_items[0].row(), 1).text()
+
+        
         
         # Check if movie has screenings
         screenings = self.db.get_screenings(movie_id)
@@ -246,27 +267,40 @@ class MovieTab(BaseTab, Ui_MovieTab):
             return
         
         if self.confirm_action("Confirm Delete", f"Are you sure you want to delete '{movie_title}'?"):
-            # Delete from Movie_Details first (due to foreign key)
-            details_success, _, _ = self.execute_query(
-                "DELETE FROM Movie_Details WHERE movie_id = ?", 
-                (movie_id,)
-            )
-            
-            if details_success:
-                # Then delete from Movie
-                movie_success, _, error = self.execute_query(
-                    "DELETE FROM Movie WHERE movie_id = ?", 
-                    (movie_id,)
-                )
-                
-                if movie_success:
-                    self.show_success_message("Success", f"Movie '{movie_title}' deleted successfully!")
+            try:
+                cur = self.db.connection.cursor()
+
+                # 1) Delete Movie_Details (if present)
+                cur.execute("DELETE FROM Movie_Details WHERE movie_id = ?", (movie_id,))
+                details_deleted = cur.rowcount  # number of rows removed from Movie_Details
+
+                # 2) Delete Movie
+                cur.execute("DELETE FROM Movie WHERE movie_id = ?", (movie_id,))
+                movies_deleted = cur.rowcount  # number of rows removed from Movie
+
+                # 3) Commit the transaction
+                self.db.connection.commit()
+
+                # 4) Check results and show clear messages
+                if movies_deleted > 0:
+                    self.show_success_message("Success", f"Movie '{movie_title}' deleted successfully! "
+                                                         f"({movies_deleted} movie row(s) deleted, "
+                                                         f"{details_deleted} detail row(s) deleted)")
                     self.clear_form()
                     self.load_data()
                 else:
-                    self.show_error_message("Error", f"Failed to delete movie: {error}")
-            else:
-                self.show_error_message("Error", "Failed to delete movie details.")
+                    # No movie row deleted — either wrong ID or FK prevented deletion
+                    self.show_error_message("Error",
+                        f"No movie was deleted for id={movie_id}. This usually means the movie id was not found "
+                        f"or a foreign-key prevented deletion. Deleted detail rows: {details_deleted}")
+            except Exception as e:
+                # Roll back on error and show the exception so it's visible
+                try:
+                    self.db.connection.rollback()
+                except Exception:
+                    pass
+                self.show_error_message("Error", f"Failed to delete movie: {e}")
+
     
     def view_movie_details(self):
         """View detailed movie information"""
