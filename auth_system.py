@@ -353,14 +353,14 @@ class SignupWindow(QWidget):
         self.signup_btn.setEnabled(False)
         
         # Create user account
-        success = self.db.create_user(username, password, email, 'customer', first_name, last_name, phone)
+        success, message = self.db.create_user(username, password, email, 'customer', first_name, last_name, phone)
         if success:
             self.show_success("Account Created", "Your account has been created successfully! You can now login.")
             print("DEBUG: auth_system about to emit signup_successful (no payload); signup returned success flag:", repr(success) if 'success' in locals() else None)
             self.signup_successful.emit()
 
         else:
-            self.show_error("Error", "Username or email already exists")
+            self.show_error("Error", message)
             self.signup_btn.setText("Create Account")
             self.signup_btn.setEnabled(True)
     

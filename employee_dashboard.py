@@ -208,7 +208,7 @@ class RefundManagementTab(QWidget):
         self.reject_btn.clicked.connect(self.reject_refund)
         
         self.refresh_btn = QPushButton("🔄 Refresh")
-        self.refresh_btn.clicked.connect(self.load_refunds)
+        self.refresh_btn.clicked.connect(lambda: self.load_refunds())
         
         button_layout.addWidget(self.view_btn)
         button_layout.addWidget(self.approve_btn)
@@ -241,7 +241,7 @@ class RefundManagementTab(QWidget):
         self.load_refunds(status)
     
     def load_refunds(self, status_filter="all"):
-        refunds = self.db.get_pending_refunds()  # This gets pending by default
+        refunds = self.db.get_all_refunds()  # Get all refunds to support filtering
         
         # Apply additional filtering if needed
         if status_filter != "all":

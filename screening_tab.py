@@ -34,7 +34,9 @@ class ScreeningTab(BaseTab, Ui_ScreeningTab):
         
         # Auto-calculate end time when movie or start time changes
         self.movieCombo.currentIndexChanged.connect(self.calculate_end_time)
+        self.movieCombo.currentIndexChanged.connect(self.calculate_end_time)
         self.startTimeInput.dateTimeChanged.connect(self.calculate_end_time)
+        self.hallCombo.currentIndexChanged.connect(self.set_auto_price)
     
     def setup_form(self):
         """Initialize form values"""
@@ -115,19 +117,25 @@ class ScreeningTab(BaseTab, Ui_ScreeningTab):
                     break
     
     def set_auto_price(self):
-        """Set automatic price based on hall capacity/type"""
+        """Set automatic price based on hall type/name"""
         hall_id = self.hallCombo.currentData()
         if hall_id:
             halls = self.db.get_halls()
             for hall in halls:
                 if hall['hall_id'] == hall_id:
-                    # Set prices based on hall capacity
-                    if hall['capacity'] <= 50:  # VIP/Small hall
+                    name = hall.get('hall_name', '').upper()
+                    price = 12.00  # Default standard price
+                    
+                    if 'IMAX' in name:
+                        price = 20.00
+                    elif 'VIP' in name:
                         price = 25.00
-                    elif hall['capacity'] <= 100:  # Standard hall
+                    elif 'PREMIUM' in name:
+                        price = 18.00
+                    elif '3D' in name:
                         price = 15.00
-                    else:  # Large hall
-                        price = 12.50
+                    elif 'STANDARD' in name:
+                        price = 12.00
                     
                     if hasattr(self, 'priceInput'):
                         self.priceInput.setValue(price)

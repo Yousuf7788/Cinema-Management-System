@@ -62,14 +62,14 @@ class Database:
 
     
     def create_user(self, username: str, password: str, email: str, user_type: str, 
-                   first_name: str, last_name: str, phone: str = None) -> bool:
+                   first_name: str, last_name: str, phone: str = None) -> tuple[bool, str]:
         try:
             cursor = self.connection.cursor()
             
             # Check if username or email already exists
             cursor.execute("SELECT user_id FROM Users WHERE username = ? OR email = ?", (username, email))
             if cursor.fetchone():
-                return False
+                return False, "Username or email already exists"
             
             # Insert into Users table first (customer_id NULL initially)
             # Insert into Users table (store plaintext password)
@@ -81,6 +81,22 @@ class Database:
             user_id = cursor.fetchone()[0]
             
             # Insert into Customer table using user_id as customer_id
+            if phone:
+                import re
+                phone = re.sub(r'\D', '', phone)  # Remove all non-digit characters
+                # if not phone:
+                #     phone = None  # REMOVED: garbage input should fail length check, not become None
+                if len(phone) != 11:
+                    self.logger.error(f"Phone number must be exactly 11 digits. Got: {len(phone)}")
+                    self.connection.rollback()
+                    return False, "Phone number must be exactly 11 digits"
+            else:
+                phone = None
+
+
+                
+            self.logger.info(f"DEBUG: create_user preparing to insert phone: '{phone}' type: {type(phone)} len: {len(phone) if phone else 'N/A'}")
+            
             cursor.execute(
                 "INSERT INTO Customer (customer_id, first_name, last_name, phone_number) VALUES (?, ?, ?, ?)",
                 user_id, first_name, last_name, phone
@@ -93,12 +109,12 @@ class Database:
             )
             
             self.connection.commit()
-            return True
+            return True, "User created successfully"
             
         except Exception as e:
             self.logger.error(f"Error creating user: {e}")
             self.connection.rollback()
-            return False
+            return False, f"Database error: {str(e)}"
     
     def authenticate_user(self, username: str, password: str) -> Optional[Dict[str, Any]]:
         """
@@ -454,6 +470,26 @@ class Database:
             return [dict(zip([column[0] for column in cursor.description], row)) for row in cursor.fetchall()]
         except Exception as e:
             self.logger.error(f"Error fetching pending refunds: {e}")
+            return []
+
+    def get_all_refunds(self) -> List[Dict[str, Any]]:
+        try:
+            cursor = self.connection.cursor()
+            cursor.execute("""
+                SELECT r.refund_id, r.refund_amount, r.refund_reason, r.refund_date, r.status,
+                       b.booking_id, b.total_amount, c.first_name, c.last_name, m.title
+                FROM Refund r
+                JOIN Payment p ON r.payment_id = p.payment_id
+                JOIN Booking b ON p.booking_id = b.booking_id
+                JOIN Customer c ON b.customer_id = c.customer_id
+                JOIN Screening s ON b.screening_id = s.screening_id
+                JOIN Movie m ON s.movie_id = m.movie_id
+                ORDER BY r.refund_date DESC
+            """)
+            
+            return [dict(zip([column[0] for column in cursor.description], row)) for row in cursor.fetchall()]
+        except Exception as e:
+            self.logger.error(f"Error fetching all refunds: {e}")
             return []
     
     def get_halls(self) -> List[Dict[str, Any]]:

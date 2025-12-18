@@ -581,7 +581,8 @@ class ProfileTab(QWidget):
         info_layout.addRow("Email:", self.email_input)
         info_layout.addRow("Phone:", self.phone_input)
         
-        self.update_btn = QPushButton("💾 Update Details")
+        self.update_btn = QPushButton("Confirm")
+        self.update_btn.setStyleSheet("color: black;")
         self.update_btn.clicked.connect(self.update_profile)
         info_layout.addRow(self.update_btn)
         
@@ -608,7 +609,8 @@ class ProfileTab(QWidget):
         pass_layout.addRow("New Password:", self.new_password_input)
         pass_layout.addRow("Confirm:", self.confirm_password_input)
         
-        self.change_pass_btn = QPushButton("🔑 Change Password")
+        self.change_pass_btn = QPushButton("Confirm Password")
+        self.change_pass_btn.setStyleSheet("color: black;")
         self.change_pass_btn.clicked.connect(self.change_password)
         pass_layout.addRow(self.change_pass_btn)
         
