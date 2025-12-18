@@ -1,4 +1,3 @@
-# employee_tab.py - INTEGRATED VERSION
 from PyQt6.QtWidgets import QTableWidgetItem, QMessageBox, QHeaderView, QDialog, QVBoxLayout, QFormLayout, QLineEdit, QDialogButtonBox
 from PyQt6.QtCore import QDate
 from PyQt6.QtGui import QColor
@@ -35,7 +34,6 @@ class EmployeeTab(BaseTab, Ui_EmployeeTab):
         self.hireDateInput.setDate(QDate.currentDate())
         self.hireDateInput.setCalendarPopup(True)
         
-        # Add salary input if not in UI
         if not hasattr(self, 'salaryInput'):
             self.add_salary_field()
     
@@ -43,7 +41,6 @@ class EmployeeTab(BaseTab, Ui_EmployeeTab):
         """Add salary field to the form"""
         from PyQt6.QtWidgets import QDoubleSpinBox
         
-        # Find the form layout to add salary field
         for i in range(self.layout().count()):
             widget = self.layout().itemAt(i).widget()
             if widget and hasattr(widget, 'layout'):
@@ -60,7 +57,6 @@ class EmployeeTab(BaseTab, Ui_EmployeeTab):
     def apply_permissions(self):
         """Apply role-based permissions"""
         if not self.is_manager:
-            # Regular employees cannot manage other employees
             self.addEmployeeBtn.hide()
             self.updateEmployeeBtn.hide()
             self.deleteEmployeeBtn.hide()
@@ -68,7 +64,6 @@ class EmployeeTab(BaseTab, Ui_EmployeeTab):
             self.updateEmployeeBtn.setEnabled(False)
             self.deleteEmployeeBtn.setEnabled(False)
             
-            # Disable form inputs for non-managers
             self.firstNameInput.setEnabled(False)
             self.lastNameInput.setEnabled(False)
             self.positionInput.setEnabled(False)
@@ -76,7 +71,6 @@ class EmployeeTab(BaseTab, Ui_EmployeeTab):
             if hasattr(self, 'salaryInput'):
                 self.salaryInput.setEnabled(False)
             
-            # Update button text for clarity
             self.refreshEmployeeBtn.setText("View Employees")
     
     def refresh_data(self):
@@ -108,7 +102,6 @@ class EmployeeTab(BaseTab, Ui_EmployeeTab):
                     item = QTableWidgetItem(str(col_data) if col_data else "")
                     self.employeeTable.setItem(row_idx, col_idx, item)
             
-            # Resize columns to content
             header = self.employeeTable.horizontalHeader()
             header.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         else:
@@ -135,16 +128,13 @@ class EmployeeTab(BaseTab, Ui_EmployeeTab):
             self.show_error_message("Error", "First name, last name, and position are required!")
             return
         
-        # Show user account creation dialog
         user_credentials = self.get_user_credentials_dialog()
         if not user_credentials:
-            return  # User cancelled
+            return
         
         try:
-            # Start transaction
             cursor = self.db.connection.cursor()
             
-            # Insert employee
             employee_query = """
             INSERT INTO Employee (first_name, last_name, position, hire_date)
             OUTPUT INSERTED.employee_id
@@ -153,13 +143,11 @@ class EmployeeTab(BaseTab, Ui_EmployeeTab):
             cursor.execute(employee_query, (first_name, last_name, position, hire_date))
             employee_id = cursor.fetchone()[0]
             
-            # Create user account
             user_query = """
             INSERT INTO Users (username, password_hash, email, user_type, employee_id)
             VALUES (?, ?, ?, ?, ?)
             """
             
-            # Hash password (using simple hash for demo - in production use proper hashing)
             import hashlib
             password_hash = hashlib.md5(user_credentials['password'].encode()).hexdigest()
             
@@ -200,20 +188,16 @@ class EmployeeTab(BaseTab, Ui_EmployeeTab):
         
         form_layout = QFormLayout()
         
-        # Username input
         username_input = QLineEdit()
         username_input.setPlaceholderText("Enter username for login")
         
-        # Email input
         email_input = QLineEdit()
         email_input.setPlaceholderText("Enter email address")
         
-        # Password input
         password_input = QLineEdit()
         password_input.setPlaceholderText("Enter temporary password")
         password_input.setEchoMode(QLineEdit.EchoMode.Password)
         
-        # Confirm password
         confirm_password_input = QLineEdit()
         confirm_password_input.setPlaceholderText("Confirm temporary password")
         confirm_password_input.setEchoMode(QLineEdit.EchoMode.Password)
@@ -225,7 +209,6 @@ class EmployeeTab(BaseTab, Ui_EmployeeTab):
         
         layout.addLayout(form_layout)
         
-        # Buttons
         button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         
         def validate_and_accept():
@@ -246,7 +229,6 @@ class EmployeeTab(BaseTab, Ui_EmployeeTab):
                 QMessageBox.warning(dialog, "Error", "Password must be at least 6 characters!")
                 return
             
-            # Check if username already exists
             check_query = "SELECT user_id FROM Users WHERE username = ?"
             success, existing_user, error = self.execute_query(check_query, (username,), fetch=True)
             
@@ -319,7 +301,6 @@ class EmployeeTab(BaseTab, Ui_EmployeeTab):
         first_name = self.employeeTable.item(selected_items[0].row(), 1).text()
         last_name = self.employeeTable.item(selected_items[0].row(), 2).text()
         
-        # Prevent deletion of employees with user accounts that might be active
         check_query = "SELECT user_id FROM Users WHERE employee_id = ?"
         success, user_account, error = self.execute_query(check_query, (employee_id,), fetch=True)
         
@@ -357,13 +338,12 @@ class EmployeeTab(BaseTab, Ui_EmployeeTab):
     def on_row_selected(self):
         """Populate form when row is selected"""
         selected_items = self.employeeTable.selectedItems()
-        if selected_items and self.is_manager:  # Only populate if user can edit
+        if selected_items and self.is_manager:
             row = selected_items[0].row()
             self.firstNameInput.setText(self.employeeTable.item(row, 1).text())
             self.lastNameInput.setText(self.employeeTable.item(row, 2).text())
             self.positionInput.setText(self.employeeTable.item(row, 3).text())
             
-            # Set hire date
             hire_date_str = self.employeeTable.item(row, 4).text()
             hire_date = QDate.fromString(hire_date_str, "yyyy-MM-dd")
             if hire_date.isValid():

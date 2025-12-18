@@ -1,4 +1,3 @@
-# auth_system.py - MODIFIED VERSION
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, 
                              QPushButton, QComboBox, QFormLayout, QGroupBox, QMessageBox,
                              QStackedWidget)
@@ -16,21 +15,18 @@ class WelcomeScreen(QWidget):
     def init_ui(self):
         layout = QVBoxLayout()
         
-        # Header
         header = QLabel("🎬 Cinema Management System")
         header.setFont(QFont("Arial", 24, QFont.Weight.Bold))
         header.setAlignment(Qt.AlignmentFlag.AlignCenter)
         header.setStyleSheet("color: #000000; margin: 20px;")
         layout.addWidget(header)
         
-        # Subtitle
         subtitle = QLabel("Your Ultimate Movie Experience")
         subtitle.setFont(QFont("Arial", 14))
         subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
         subtitle.setStyleSheet("color: #000000; margin-bottom: 30px;")
         layout.addWidget(subtitle)
         
-        # Buttons
         button_layout = QVBoxLayout()
         
         self.login_btn = QPushButton("🔐 Login to Existing Account")
@@ -46,7 +42,6 @@ class WelcomeScreen(QWidget):
         
         layout.addLayout(button_layout)
         
-        # Info section
         info_group = QGroupBox("About the System")
         info_layout = QVBoxLayout()
         
@@ -67,7 +62,7 @@ class WelcomeScreen(QWidget):
     def apply_styles(self):
         self.setStyleSheet("""
             QPushButton {
-                background-color: #3498db;
+                background-color:
                 color: white;
                 border: none;
                 border-radius: 5px;
@@ -75,11 +70,11 @@ class WelcomeScreen(QWidget):
                 font-weight: bold;
             }
             QPushButton:hover {
-                background-color: #2980b9;
+                background-color:
             }
             QGroupBox {
                 font-weight: bold;
-                border: 2px solid #bdc3c7;
+                border: 2px solid
                 border-radius: 8px;
                 margin-top: 10px;
                 padding-top: 10px;
@@ -88,7 +83,7 @@ class WelcomeScreen(QWidget):
                 subcontrol-origin: margin;
                 left: 10px;
                 padding: 0 5px 0 5px;
-                color: #2c3e50;
+                color:
             }
         """)
 
@@ -104,14 +99,12 @@ class LoginWindow(QWidget):
     def init_ui(self):
         layout = QVBoxLayout()
         
-        # Header
         header = QLabel("🔐 Login to Cinema System")
         header.setFont(QFont("Arial", 18, QFont.Weight.Bold))
         header.setAlignment(Qt.AlignmentFlag.AlignCenter)
         header.setStyleSheet("color: #2c3e50; margin: 15px;")
         layout.addWidget(header)
         
-        # Login form
         form_group = QGroupBox("Enter Your Credentials")
         form_layout = QFormLayout()
         
@@ -130,7 +123,6 @@ class LoginWindow(QWidget):
         form_group.setLayout(form_layout)
         layout.addWidget(form_group)
         
-        # Buttons
         button_layout = QHBoxLayout()
         
         self.login_btn = QPushButton("Login")
@@ -146,7 +138,6 @@ class LoginWindow(QWidget):
         
         layout.addLayout(button_layout)
         
-        # User type info
         info_label = QLabel("💡 Employees: Use provided work credentials\n💡 Customers: Use your created account")
         info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         info_label.setStyleSheet("color: #7f8c8d; font-size: 11px; margin-top: 10px;")
@@ -176,7 +167,6 @@ class LoginWindow(QWidget):
 
             return
 
-        # failure / unexpected
         self.login_btn.setText("Login")
         self.login_btn.setEnabled(True)
         if user_data is None:
@@ -198,7 +188,7 @@ class LoginWindow(QWidget):
     def apply_styles(self):
         self.setStyleSheet("""
             QPushButton {
-                background-color: #3498db;
+                background-color:
                 color: white;
                 border: none;
                 border-radius: 5px;
@@ -207,23 +197,23 @@ class LoginWindow(QWidget):
                 min-width: 100px;
             }
             QPushButton:hover {
-                background-color: #2980b9;
+                background-color:
             }
             QPushButton:disabled {
-                background-color: #bdc3c7;
+                background-color:
             }
             QLineEdit {
                 padding: 8px;
-                border: 2px solid #bdc3c7;
+                border: 2px solid
                 border-radius: 5px;
                 font-size: 14px;
             }
             QLineEdit:focus {
-                border-color: #3498db;
+                border-color:
             }
             QGroupBox {
                 font-weight: bold;
-                border: 2px solid #bdc3c7;
+                border: 2px solid
                 border-radius: 8px;
                 margin-top: 10px;
                 padding-top: 10px;
@@ -232,7 +222,7 @@ class LoginWindow(QWidget):
                 subcontrol-origin: margin;
                 left: 10px;
                 padding: 0 5px 0 5px;
-                color: #2c3e50;
+                color:
             }
         """)
 
@@ -248,18 +238,15 @@ class SignupWindow(QWidget):
     def init_ui(self):
         layout = QVBoxLayout()
         
-        # Header
         header = QLabel("👤 Create Customer Account")
         header.setFont(QFont("Arial", 18, QFont.Weight.Bold))
         header.setAlignment(Qt.AlignmentFlag.AlignCenter)
         header.setStyleSheet("color: #2c3e50; margin: 15px;")
         layout.addWidget(header)
         
-        # Signup form
         form_group = QGroupBox("Customer Information")
         form_layout = QFormLayout()
         
-        # Create input fields
         self.first_name_input = QLineEdit()
         self.last_name_input = QLineEdit()
         self.email_input = QLineEdit()
@@ -268,7 +255,6 @@ class SignupWindow(QWidget):
         self.password_input = QLineEdit()
         self.confirm_password_input = QLineEdit()
         
-        # Set properties
         inputs = [
             self.first_name_input, self.last_name_input, self.email_input,
             self.phone_input, self.username_input, self.password_input,
@@ -281,7 +267,6 @@ class SignupWindow(QWidget):
         self.password_input.setEchoMode(QLineEdit.EchoMode.Password)
         self.confirm_password_input.setEchoMode(QLineEdit.EchoMode.Password)
         
-        # Set placeholders
         self.first_name_input.setPlaceholderText("Enter first name")
         self.last_name_input.setPlaceholderText("Enter last name")
         self.email_input.setPlaceholderText("Enter email address")
@@ -290,7 +275,6 @@ class SignupWindow(QWidget):
         self.password_input.setPlaceholderText("Enter password (min 6 characters)")
         self.confirm_password_input.setPlaceholderText("Confirm your password")
         
-        # Add to form
         form_layout.addRow("👤 First Name:", self.first_name_input)
         form_layout.addRow("👤 Last Name:", self.last_name_input)
         form_layout.addRow("📧 Email:", self.email_input)
@@ -302,7 +286,6 @@ class SignupWindow(QWidget):
         form_group.setLayout(form_layout)
         layout.addWidget(form_group)
         
-        # Buttons
         button_layout = QHBoxLayout()
         
         self.back_btn = QPushButton("Back to Welcome")
@@ -322,7 +305,6 @@ class SignupWindow(QWidget):
         self.apply_styles()
     
     def handle_signup(self):
-        # Get form data
         first_name = self.first_name_input.text().strip()
         last_name = self.last_name_input.text().strip()
         email = self.email_input.text().strip()
@@ -331,7 +313,6 @@ class SignupWindow(QWidget):
         password = self.password_input.text().strip()
         confirm_password = self.confirm_password_input.text().strip()
         
-        # Validation
         if not all([first_name, last_name, email, username, password]):
             self.show_error("Error", "Please fill in all required fields")
             return
@@ -348,11 +329,9 @@ class SignupWindow(QWidget):
             self.show_error("Error", "Please enter a valid email address")
             return
         
-        # Show loading state
         self.signup_btn.setText("Creating Account...")
         self.signup_btn.setEnabled(False)
         
-        # Create user account
         success, message = self.db.create_user(username, password, email, 'customer', first_name, last_name, phone)
         if success:
             self.show_success("Account Created", "Your account has been created successfully! You can now login.")
@@ -384,7 +363,7 @@ class SignupWindow(QWidget):
     def apply_styles(self):
         self.setStyleSheet("""
             QPushButton {
-                background-color: #27ae60;
+                background-color:
                 color: white;
                 border: none;
                 border-radius: 5px;
@@ -393,23 +372,23 @@ class SignupWindow(QWidget):
                 min-width: 100px;
             }
             QPushButton:hover {
-                background-color: #219a52;
+                background-color:
             }
             QPushButton:disabled {
-                background-color: #bdc3c7;
+                background-color:
             }
             QLineEdit {
                 padding: 8px;
-                border: 2px solid #bdc3c7;
+                border: 2px solid
                 border-radius: 5px;
                 font-size: 14px;
             }
             QLineEdit:focus {
-                border-color: #27ae60;
+                border-color:
             }
             QGroupBox {
                 font-weight: bold;
-                border: 2px solid #bdc3c7;
+                border: 2px solid
                 border-radius: 8px;
                 margin-top: 10px;
                 padding-top: 10px;
@@ -418,6 +397,6 @@ class SignupWindow(QWidget):
                 subcontrol-origin: margin;
                 left: 10px;
                 padding: 0 5px 0 5px;
-                color: #2c3e50;
+                color:
             }
         """)

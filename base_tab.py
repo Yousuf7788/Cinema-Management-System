@@ -1,4 +1,3 @@
-# base_tab.py - ENHANCED VERSION
 """
 Base tab class for all tabs in the Cinema Management System.
 Provides common functionality for all dashboard components.
@@ -15,7 +14,6 @@ class BaseTab(QWidget):
     Provides common functionality and database connection.
     """
     
-    # Signal for data refresh notifications
     data_updated = pyqtSignal()
     
     def __init__(self, db, table_name=None):
@@ -31,8 +29,6 @@ class BaseTab(QWidget):
         self.table_name = table_name
         self.logger = logging.getLogger(self.__class__.__name__)
         
-        # Note: We don't call init_ui() here anymore
-        # Each tab class will handle its own UI setup via setupUi(self)
     
     def load_data(self):
         """Load data from database. To be implemented by subclasses."""
@@ -62,11 +58,9 @@ class BaseTab(QWidget):
         Uses the database connection's execute_query method if available.
         """
         try:
-            # Use the database's execute_query method if it exists
             if hasattr(self.db, 'execute_query'):
                 return self.db.execute_query(query, params, fetch)
             else:
-                # Fallback to direct database connection
                 cursor = self.db.connection.cursor()
                 if params:
                     cursor.execute(query, params)
@@ -157,15 +151,12 @@ class BaseTab(QWidget):
         for row_idx, row_data in enumerate(data):
             for col_idx in range(len(headers)):
                 if isinstance(row_data, dict):
-                    # Data is dictionary
                     cell_value = row_data.get(headers[col_idx].lower().replace(' ', '_'), '')
                 else:
-                    # Data is tuple/list
                     cell_value = row_data[col_idx] if col_idx < len(row_data) else ''
                 
                 item = QTableWidgetItem(str(cell_value))
                 
-                # Apply status coloring if specified
                 if status_column == col_idx:
                     self.color_status_item(item, str(cell_value))
                 
@@ -248,7 +239,6 @@ class BaseTab(QWidget):
         try:
             from datetime import datetime
             if isinstance(date_string, str):
-                # Try to parse the date string
                 for fmt in ['%Y-%m-%d %H:%M:%S', '%Y-%m-%d', '%d/%m/%Y']:
                     try:
                         dt = datetime.strptime(date_string, fmt)

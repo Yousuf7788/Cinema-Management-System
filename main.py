@@ -1,4 +1,3 @@
-# main.py - APPLICATION ENTRY POINT
 import sys
 import os
 from PyQt6.QtWidgets import QApplication, QMainWindow, QStackedWidget, QMessageBox
@@ -25,17 +24,15 @@ class MainApplication(QMainWindow):
         Assumes SQL Server is reachable at localhost:1433 (change if different).
         """
         host = "localhost"         # change if Azure Data Studio shows a different host
-        port = 1433                # change if you published a different port
+        port = 1433
         server = f"{host},{port}"  # pass host,port to pyodbc (comma-separated)
         database = "CinemaDB"
         username = "sa"            # change to the SQL login you use
         password = "reallyStrongPwd123"  # change to your real SA/password
 
-        # Always try SQL auth on macOS — Trusted_Connection won't work here.
         try:
             ok = self.db.connect(server, database, username, password)
             if not ok:
-                # connection failed — log and show UI error
                 print("DB.connect returned False using SQL auth")
                 self.show_db_error()
                 return False
@@ -44,7 +41,6 @@ class MainApplication(QMainWindow):
             return True
 
         except Exception as e:
-            # Defensive: if Database.connect raises an exception instead of returning False
             print("Exception while connecting to DB: %s", e)
             self.show_db_error()
             return False
@@ -71,17 +67,14 @@ class MainApplication(QMainWindow):
         self.setWindowTitle("Cinema Management System")
         self.setGeometry(100, 100, 1200, 800)
         
-        # Central widget with stacked layout
         self.stacked_widget = QStackedWidget()
         self.setCentralWidget(self.stacked_widget)
         
-        # Create all screens
         self.create_welcome_screen()
         self.create_login_screen()
         self.create_signup_screen()
         self.create_dashboards()
         
-        # Show welcome screen first
         self.stacked_widget.setCurrentWidget(self.welcome_screen)
         
         self.apply_styles()
@@ -145,7 +138,6 @@ class MainApplication(QMainWindow):
         elif user_type == 'manager':
             self.show_manager_dashboard()
         else:
-            #QMessageBox.critical(self, "Error", f"Unknown user type: {user_type}")
             print("unknown user type")
     
     def handle_signup_success(self):
@@ -189,12 +181,10 @@ class MainApplication(QMainWindow):
         """Handle logout from any dashboard"""
         self.current_user = None
         
-        # Clean up dashboards
         self.customer_dashboard = None
         self.employee_dashboard = None
         self.manager_dashboard = None
         
-        # Recreate welcome and auth screens
         self.stacked_widget.removeWidget(self.welcome_screen)
         self.stacked_widget.removeWidget(self.login_screen)
         self.stacked_widget.removeWidget(self.signup_screen)
@@ -218,15 +208,15 @@ class MainApplication(QMainWindow):
         """Apply global application styles"""
         self.setStyleSheet("""
             QMainWindow {
-                background-color: #ecf0f1;
+                background-color:
             }
             QLabel, QSpinBox, QDoubleSpinBox, QComboBox {
-                color: #000000;
+                color:
             }
             QLineEdit, QTextEdit, QPlainTextEdit {
                 color: white;
-                background-color: #2c3e50;
-                border: 1px solid #bdc3c7;
+                background-color:
+                border: 1px solid
                 border-radius: 4px;
                 padding: 4px;
             }
@@ -234,11 +224,11 @@ class MainApplication(QMainWindow):
                 background-color: white;
             }
             QMessageBox QLabel {
-                color: #000000;
+                color:
                 background-color: transparent;
             }
             QMessageBox QPushButton {
-                background-color: #3498db;
+                background-color:
                 color: white; /* Keep buttons white text on blue background for readability */
                 border: none;
                 border-radius: 5px;
@@ -247,11 +237,10 @@ class MainApplication(QMainWindow):
                 min-width: 80px;
             }
             QMessageBox QPushButton:hover {
-                background-color: #2980b9;
+                background-color:
             }
         """)
         
-        # Set application font
         app_font = QFont("Segoe UI", 10)
         QApplication.setFont(app_font)
     
@@ -266,7 +255,6 @@ class MainApplication(QMainWindow):
         )
         
         if reply == QMessageBox.StandardButton.Yes:
-            # Clean up resources
             if hasattr(self.db, 'connection') and self.db.connection:
                 self.db.connection.close()
             event.accept()
@@ -276,16 +264,13 @@ class MainApplication(QMainWindow):
 def main():
     """Main application entry point"""
     try:
-        # Create Qt application
         app = QApplication(sys.argv)
         app.setApplicationName("Cinema Management System")
         app.setApplicationVersion("1.0")
         
-        # Create and show main window
         main_window = MainApplication()
         main_window.show()
         
-        # Start event loop
         sys.exit(app.exec())
         
     except Exception as e:

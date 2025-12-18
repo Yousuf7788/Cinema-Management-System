@@ -1,4 +1,3 @@
-# payment_tab.py - INTEGRATED VERSION
 from PyQt6.QtWidgets import QTableWidgetItem, QMessageBox, QHeaderView, QPushButton
 from PyQt6.QtCore import QDateTime
 from PyQt6.QtGui import QColor
@@ -24,16 +23,14 @@ class PaymentTab(BaseTab, Ui_PaymentTab):
         self.load_dynamic_data()
         self.load_data()
         
-        # Add dynamic Approve button
-        # Try to find layout of existing buttons
-        layout = None
-        if hasattr(self, 'addPaymentBtn') and self.addPaymentBtn.parent():
-            layout = self.addPaymentBtn.parent().layout()
-            
-        if layout:
+        if hasattr(self, 'horizontalLayout'):
             self.approve_btn = QPushButton("✅ Approve Payment")
             self.approve_btn.clicked.connect(self.approve_payment)
-            layout.addWidget(self.approve_btn)
+            self.horizontalLayout.insertWidget(3, self.approve_btn)
+        else:
+             self.approve_btn = QPushButton("✅ Approve Payment")
+             self.approve_btn.clicked.connect(self.approve_payment)
+             self.layout().addWidget(self.approve_btn)
     
     def approve_payment(self):
         """Approve a pending payment"""
@@ -45,36 +42,30 @@ class PaymentTab(BaseTab, Ui_PaymentTab):
         row = selected_items[0].row()
         payment_id = int(self.paymentTable.item(row, 0).text())
         current_status = self.paymentTable.item(row, 5).text().lower()
-        booking_id_item = self.paymentTable.item(row, 2) # Wait, col 2 is Movie title in load_data...
-        # I need booking_id. load_data query selects payment_id, customer, movie... 
-        # It doesn't put booking_id in table explicitly visibly?
-        # Let's check load_data.
-        # Query: SELECT p.payment_id, ... 
-        # I might need to fetch booking_id.
-        # Alternatively, execute query to get booking_id from payment_id.
         
         if current_status == 'completed':
             self.show_error_message("Info", "Payment is already completed.")
             return
 
         if self.confirm_action("Approve Payment", "Approve this payment and confirm the booking?"):
-             # Get booking_id first
+             print(f"[DEBUG] Approving payment {payment_id}...")
              b_query = "SELECT booking_id FROM Payment WHERE payment_id = ?"
              s, r, e = self.execute_query(b_query, (payment_id,), fetch=True)
              if s and r:
                  booking_id = r[0][0]
+                 print(f"[DEBUG] Found booking_id: {booking_id}")
                  
-                 # Update Payment
                  p_query = "UPDATE Payment SET payment_status = 'completed' WHERE payment_id = ?"
                  self.execute_query(p_query, (payment_id,))
                  
-                 # Update Booking
                  b_update = "UPDATE Booking SET status = 'confirmed' WHERE booking_id = ?"
                  self.execute_query(b_update, (booking_id,))
+                 print(f"[DEBUG] Updated booking {booking_id} status to 'confirmed'")
                  
                  self.show_success_message("Success", "Payment approved and booking confirmed!")
                  self.load_data()
              else:
+                 print(f"[ERROR] Could not find booking for payment {payment_id}")
                  self.show_error_message("Error", "Could not find associated booking.")
     
     def connect_signals(self):
@@ -85,7 +76,6 @@ class PaymentTab(BaseTab, Ui_PaymentTab):
         self.refreshPaymentBtn.clicked.connect(self.refresh_data)
         self.paymentTable.itemSelectionChanged.connect(self.on_row_selected)
         
-        # Auto-fill amount when booking is selected
         self.bookingCombo.currentIndexChanged.connect(self.auto_fill_amount)
     
     def setup_form(self):
@@ -93,20 +83,17 @@ class PaymentTab(BaseTab, Ui_PaymentTab):
         self.amountInput.setRange(0, 1000)
         self.amountInput.setPrefix("$ ")
         
-        # Populate combo boxes if not already done in UI
         if self.paymentMethodCombo.count() == 0:
             self.paymentMethodCombo.addItems(["Credit Card", "Debit Card", "Cash", "Mobile Payment", "Online"])
         
         if self.paymentStatusCombo.count() == 0:
             self.paymentStatusCombo.addItems(["pending", "completed", "failed", "refunded"])
         
-        # Set default values
         self.paymentMethodCombo.setCurrentText("Credit Card")
         self.paymentStatusCombo.setCurrentText("completed")
     
     def load_dynamic_data(self):
         """Load combo box data"""
-        # Load bookings that don't have payments yet, or all bookings for updates
         query = """
         SELECT b.booking_id, 
                c.first_name + ' ' + c.last_name + ' - ' + m.title + ' ($' + CAST(b.total_amount AS VARCHAR) + ')'
@@ -131,7 +118,6 @@ class PaymentTab(BaseTab, Ui_PaymentTab):
         """Auto-fill amount based on selected booking"""
         booking_id = self.bookingCombo.currentData()
         if booking_id:
-            # Get booking amount from database
             query = "SELECT total_amount FROM Booking WHERE booking_id = ?"
             success, results, error = self.execute_query(query, (booking_id,), fetch=True)
             
@@ -147,9 +133,7 @@ class PaymentTab(BaseTab, Ui_PaymentTab):
     
     def load_data(self):
         """Load payment data into table"""
-        # Build query based on user role
         if self.user_type == 'customer':
-            # Customers only see their own payments
             query = """
             SELECT p.payment_id, c.first_name + ' ' + c.last_name, m.title,
                    p.amount, p.payment_method, p.payment_status, p.payment_date
@@ -163,7 +147,6 @@ class PaymentTab(BaseTab, Ui_PaymentTab):
             """
             success, results, error = self.execute_query(query, (self.user_data['customer_id'],), fetch=True)
         else:
-            # Employees/managers see all payments
             query = """
             SELECT p.payment_id, c.first_name + ' ' + c.last_name, m.title,
                    p.amount, p.payment_method, p.payment_status, p.payment_date
@@ -188,11 +171,9 @@ class PaymentTab(BaseTab, Ui_PaymentTab):
                 for col_idx, col_data in enumerate(row_data):
                     item = QTableWidgetItem(str(col_data))
                     
-                    # Color code status column
-                    if col_idx == 5:  # Status column
+                    if col_idx == 5:
                         self.color_status_item(item, str(col_data).lower())
                     
-                    # Format amount as currency
                     if col_idx == 3 and col_data:
                         try:
                             item.setText(self.format_currency(float(col_data)))
@@ -201,7 +182,6 @@ class PaymentTab(BaseTab, Ui_PaymentTab):
                     
                     self.paymentTable.setItem(row_idx, col_idx, item)
             
-            # Resize columns to content
             header = self.paymentTable.horizontalHeader()
             header.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         else:
@@ -227,7 +207,6 @@ class PaymentTab(BaseTab, Ui_PaymentTab):
             self.show_error_message("Error", "Payment amount must be greater than 0!")
             return
         
-        # Check if booking already has a payment
         check_query = "SELECT payment_id FROM Payment WHERE booking_id = ? AND payment_status != 'refunded'"
         success, existing_payment, error = self.execute_query(check_query, (booking_id,), fetch=True)
         
@@ -235,7 +214,6 @@ class PaymentTab(BaseTab, Ui_PaymentTab):
             self.show_error_message("Error", "This booking already has an active payment!")
             return
         
-        # Insert payment
         query = """
         INSERT INTO Payment (booking_id, amount, payment_method, payment_status, payment_date)
         VALUES (?, ?, ?, ?, GETDATE())
@@ -245,9 +223,7 @@ class PaymentTab(BaseTab, Ui_PaymentTab):
         if success:
             self.show_success_message("Success", "Payment recorded successfully!")
             
-            # Update booking status if payment is completed
             if payment_status == 'completed':
-                # Move to 'pending' instead of 'confirmed'
                 update_booking_query = "UPDATE Booking SET status = 'pending' WHERE booking_id = ?"
                 self.execute_query(update_booking_query, (booking_id,))
             
@@ -273,7 +249,6 @@ class PaymentTab(BaseTab, Ui_PaymentTab):
             self.show_error_message("Error", "Booking selection is required!")
             return
         
-        # Get old status for comparison
         old_status_query = "SELECT payment_status FROM Payment WHERE payment_id = ?"
         success, old_status_result, error = self.execute_query(old_status_query, (payment_id,), fetch=True)
         old_status = old_status_result[0][0] if success and old_status_result else None
@@ -286,7 +261,6 @@ class PaymentTab(BaseTab, Ui_PaymentTab):
         
         success, result, error = self.execute_query(query, (booking_id, amount, payment_method, payment_status, payment_id))
         if success:
-            # Update booking status if payment status changed to/from completed
             if old_status != payment_status:
                 if payment_status == 'completed':
                     update_query = "UPDATE Booking SET status = 'confirmed' WHERE booking_id = ?"
@@ -310,7 +284,6 @@ class PaymentTab(BaseTab, Ui_PaymentTab):
         payment_id = int(self.paymentTable.item(selected_items[0].row(), 0).text())
         payment_status = self.paymentTable.item(selected_items[0].row(), 5).text()
         
-        # Prevent deletion of completed payments (should use refunds instead)
         if payment_status.lower() == 'completed':
             self.show_error_message(
                 "Cannot Delete", 
@@ -339,12 +312,10 @@ class PaymentTab(BaseTab, Ui_PaymentTab):
         payment_id = int(self.paymentTable.item(selected_items[0].row(), 0).text())
         payment_amount = float(self.paymentTable.item(selected_items[0].row(), 3).text().replace('$', ''))
         
-        # Check if payment is eligible for refund
         if self.paymentTable.item(selected_items[0].row(), 5).text().lower() != 'completed':
             self.show_error_message("Error", "Only completed payments can be refunded!")
             return
         
-        # Create refund record
         refund_query = """
         INSERT INTO Refund (payment_id, refund_amount, refund_reason, status, refund_date)
         VALUES (?, ?, ?, 'pending', GETDATE())
@@ -356,11 +327,9 @@ class PaymentTab(BaseTab, Ui_PaymentTab):
         if ok and reason:
             success, result, error = self.execute_query(refund_query, (payment_id, payment_amount, reason))
             if success:
-                # Update payment status
                 update_query = "UPDATE Payment SET payment_status = 'refunded' WHERE payment_id = ?"
                 self.execute_query(update_query, (payment_id,))
                 
-                # Update booking status
                 booking_update_query = """
                 UPDATE Booking SET status = 'refunded' 
                 WHERE booking_id = (SELECT booking_id FROM Payment WHERE payment_id = ?)
@@ -385,25 +354,21 @@ class PaymentTab(BaseTab, Ui_PaymentTab):
         if selected_items:
             row = selected_items[0].row()
             
-            # Set amount (remove currency symbol)
             amount_text = self.paymentTable.item(row, 3).text()
             if amount_text.startswith('$'):
                 amount = float(amount_text[1:])
                 self.amountInput.setValue(amount)
             
-            # Set payment method
             payment_method = self.paymentTable.item(row, 4).text()
             index = self.paymentMethodCombo.findText(payment_method)
             if index >= 0:
                 self.paymentMethodCombo.setCurrentIndex(index)
             
-            # Set payment status
             payment_status = self.paymentTable.item(row, 5).text()
             index = self.paymentStatusCombo.findText(payment_status)
             if index >= 0:
                 self.paymentStatusCombo.setCurrentIndex(index)
             
-            # For booking combo, find by customer and movie info
             customer_info = self.paymentTable.item(row, 1).text()
             movie_info = self.paymentTable.item(row, 2).text()
             search_text = f"{customer_info} - {movie_info}"

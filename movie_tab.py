@@ -1,4 +1,3 @@
-# movie_tab.py - INTEGRATED VERSION
 from PyQt6.QtWidgets import QTableWidgetItem, QMessageBox, QDialog, QVBoxLayout, QFormLayout, QTextEdit, QDialogButtonBox, QPushButton
 from ui_movie_tab import Ui_MovieTab
 from base_tab import BaseTab
@@ -28,10 +27,8 @@ class MovieTab(BaseTab, Ui_MovieTab):
         self.refreshMovieBtn.clicked.connect(self.refresh_data)
         self.movieTable.itemSelectionChanged.connect(self.on_row_selected)
         
-        # View details button
         self.viewDetailsBtn = getattr(self, 'viewDetailsBtn', None)
         if not self.viewDetailsBtn:
-            # Add view details button if not in UI
             from PyQt6.QtWidgets import QPushButton, QHBoxLayout
             button_layout = QHBoxLayout()
             self.viewDetailsBtn = QPushButton("👁 View Details")
@@ -39,7 +36,6 @@ class MovieTab(BaseTab, Ui_MovieTab):
             button_layout.addWidget(self.viewDetailsBtn)
             button_layout.addStretch()
             
-            # Find the layout to add the button
             for i in range(self.layout().count()):
                 widget = self.layout().itemAt(i).widget()
                 if widget and hasattr(widget, 'layout'):
@@ -52,20 +48,17 @@ class MovieTab(BaseTab, Ui_MovieTab):
         self.durationInput.setSuffix(" minutes")
         self.durationInput.setValue(120)
         
-        # Populate rating combo if not already done in UI
         if self.ratingCombo.count() == 0:
             self.ratingCombo.addItems(["G", "PG", "PG-13", "R", "NC-17"])
     
     def apply_permissions(self):
         """Apply role-based permissions"""
         if not self.is_manager:
-            # Regular employees can only view and update, not add/delete
             self.addMovieBtn.hide()
             self.deleteMovieBtn.hide()
             self.addMovieBtn.setEnabled(False)
             self.deleteMovieBtn.setEnabled(False)
             
-            # Update button text for clarity
             self.updateMovieBtn.setText("Update Movie Details")
     
     def refresh_data(self):
@@ -102,7 +95,6 @@ class MovieTab(BaseTab, Ui_MovieTab):
             self.show_error_message("Access Denied", "Only managers can add new movies!")
             return
         
-        # Get basic movie info from form
         title = self.titleInput.text().strip()
         genre = self.genreInput.text().strip()
         duration = self.durationInput.value()
@@ -112,12 +104,10 @@ class MovieTab(BaseTab, Ui_MovieTab):
             self.show_error_message("Error", "Movie title is required!")
             return
         
-        # Show detailed movie info dialog
         movie_details = self.get_movie_details_dialog()
         if not movie_details:
-            return  # User cancelled
+            return
         
-        # Add movie using new database method
         success = self.db.add_movie(
             title=title,
             genre=genre,
@@ -143,12 +133,9 @@ class MovieTab(BaseTab, Ui_MovieTab):
         dialog.setModal(True)
         dialog.setFixedSize(500, 400)
         
-        # Pre-fetch data if movie_id provided
         current_data = {}
         if db and movie_id:
             try:
-                # We need to fetch details. get_movies joins with details, so we can use that for now.
-                # In a more optimized app, we'd have a specific get_movie_details method.
                 movies = db.get_movies()
                 current_data = next((m for m in movies if m['movie_id'] == movie_id), {})
             except Exception as e:
@@ -158,27 +145,22 @@ class MovieTab(BaseTab, Ui_MovieTab):
         
         form_layout = QFormLayout()
         
-        # Director input
         director_input = QTextEdit()
         director_input.setMaximumHeight(60)
         director_input.setPlaceholderText("Enter director name(s)")
         
-        # Cast input
         cast_input = QTextEdit()
         cast_input.setMaximumHeight(80)
         cast_input.setPlaceholderText("Enter main cast members")
         
-        # Synopsis input
         synopsis_input = QTextEdit()
         synopsis_input.setMaximumHeight(120)
         synopsis_input.setPlaceholderText("Enter movie synopsis or plot summary")
         
-        # Release date (simplified - in real app use QDateEdit)
         from PyQt6.QtWidgets import QLineEdit
         release_input = QLineEdit()
         release_input.setPlaceholderText("YYYY-MM-DD")
         
-        # Pre-fill data
         if current_data:
             director_input.setPlainText(current_data.get('director', ''))
             cast_input.setPlainText(current_data.get('cast', ''))
@@ -194,7 +176,6 @@ class MovieTab(BaseTab, Ui_MovieTab):
         
         layout.addLayout(form_layout)
         
-        # Buttons
         button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         button_box.accepted.connect(dialog.accept)
         button_box.rejected.connect(dialog.reject)
@@ -227,7 +208,6 @@ class MovieTab(BaseTab, Ui_MovieTab):
             self.show_error_message("Error", "Movie title is required!")
             return
         
-        # Update basic movie info
         query = """
         UPDATE Movie 
         SET title = ?, genre = ?, duration_minutes = ?, rating = ?
@@ -257,7 +237,6 @@ class MovieTab(BaseTab, Ui_MovieTab):
 
         
         
-        # Check if movie has screenings
         screenings = self.db.get_screenings(movie_id)
         if screenings:
             self.show_error_message(
@@ -270,18 +249,14 @@ class MovieTab(BaseTab, Ui_MovieTab):
             try:
                 cur = self.db.connection.cursor()
 
-                # 1) Delete Movie_Details (if present)
                 cur.execute("DELETE FROM Movie_Details WHERE movie_id = ?", (movie_id,))
-                details_deleted = cur.rowcount  # number of rows removed from Movie_Details
+                details_deleted = cur.rowcount
 
-                # 2) Delete Movie
                 cur.execute("DELETE FROM Movie WHERE movie_id = ?", (movie_id,))
-                movies_deleted = cur.rowcount  # number of rows removed from Movie
+                movies_deleted = cur.rowcount
 
-                # 3) Commit the transaction
                 self.db.connection.commit()
 
-                # 4) Check results and show clear messages
                 if movies_deleted > 0:
                     self.show_success_message("Success", f"Movie '{movie_title}' deleted successfully! "
                                                          f"({movies_deleted} movie row(s) deleted, "
@@ -289,12 +264,10 @@ class MovieTab(BaseTab, Ui_MovieTab):
                     self.clear_form()
                     self.load_data()
                 else:
-                    # No movie row deleted — either wrong ID or FK prevented deletion
                     self.show_error_message("Error",
                         f"No movie was deleted for id={movie_id}. This usually means the movie id was not found "
                         f"or a foreign-key prevented deletion. Deleted detail rows: {details_deleted}")
             except Exception as e:
-                # Roll back on error and show the exception so it's visible
                 try:
                     self.db.connection.rollback()
                 except Exception:
@@ -312,7 +285,6 @@ class MovieTab(BaseTab, Ui_MovieTab):
         movie_id = int(self.movieTable.item(selected_items[0].row(), 0).text())
         movie_title = self.movieTable.item(selected_items[0].row(), 1).text()
         
-        # Get movie details from database
         movies = self.db.get_movies()
         movie = next((m for m in movies if m['movie_id'] == movie_id), None)
         
@@ -320,7 +292,6 @@ class MovieTab(BaseTab, Ui_MovieTab):
             self.show_error_message("Error", "Could not load movie details!")
             return
         
-        # Show details dialog
         dialog = QDialog(self)
         dialog.setWindowTitle(f"Movie Details - {movie_title}")
         dialog.setModal(True)
@@ -349,7 +320,6 @@ class MovieTab(BaseTab, Ui_MovieTab):
         
         layout.addWidget(details_browser)
         
-        # Close button
         close_btn = QPushButton("Close")
         close_btn.clicked.connect(dialog.accept)
         layout.addWidget(close_btn)
@@ -371,12 +341,10 @@ class MovieTab(BaseTab, Ui_MovieTab):
             self.titleInput.setText(self.movieTable.item(row, 1).text())
             self.genreInput.setText(self.movieTable.item(row, 2).text())
             
-            # Extract duration number from "X min" format
             duration_text = self.movieTable.item(row, 3).text()
             duration = int(duration_text.replace(' min', '')) if 'min' in duration_text else 120
             self.durationInput.setValue(duration)
             
-            # Set rating
             rating = self.movieTable.item(row, 4).text()
             index = self.ratingCombo.findText(rating)
             if index >= 0:

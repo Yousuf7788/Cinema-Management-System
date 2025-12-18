@@ -1,4 +1,3 @@
-# customer_dashboard.py - MODIFIED VERSION
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTabWidget, 
                              QTableWidget, QTableWidgetItem, QMessageBox, QLabel, 
                              QPushButton, QDialog, QListWidget, QDialogButtonBox,
@@ -8,7 +7,6 @@ from PyQt6.QtGui import QFont, QPixmap
 import os
 import logging
 
-# Configure logging
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -35,12 +33,10 @@ class CustomerDashboard(QWidget):
             """
             super().__init__(parent)
 
-            # Basic required attribute so partial init won't break callers
             self.db = db
             self.user_data = None
             self.current_customer_id = None
 
-            # Accept either dict, int, or None (if allow_none True)
             if isinstance(user_data, dict):
                 self.user_data = user_data
                 self.current_customer_id = self.user_data.get('customer_id')
@@ -48,30 +44,22 @@ class CustomerDashboard(QWidget):
                 self.user_data = None
                 self.current_customer_id = user_data
             elif user_data is None:
-                # allow None for staff views; caller must set allow_none when that's expected
                 if not allow_none:
-                    # Prefer to raise so calling code notices programmer error.
                     raise ValueError("CustomerDashboard expected user_data (dict) or customer_id (int); got None. "
                                     "If you want a staff view, call with allow_none=True.")
-                # else: leave current_customer_id as None (staff/manager view)
                 logger.debug("Creating staff/manager CustomerDashboard (no customer_id).")
             else:
-                # invalid payload — raise (don't show QMessageBox here)
                 raise TypeError(f"CustomerDashboard expected user_data (dict) or customer_id (int) or None, "
                                 f"got {type(user_data)!r}: {user_data!r}")
 
-            # Now safe to proceed to UI construction
-            # Any heavy UI setup should be in init_ui() which must guard against None customer_id
             self.init_ui()
     def init_ui(self):
         layout = QVBoxLayout()
         
-        # Header with welcome message and logout
         header_widget = QWidget()
         header_widget.setStyleSheet("background-color: #2c3e50; padding: 10px;")
         header_layout = QHBoxLayout(header_widget)
         
-# safe welcome label — works for customers and staff (no customer_data)
         if self.user_data:
             first = self.user_data.get('first_name', '').strip()
             last = self.user_data.get('last_name', '').strip()
@@ -80,7 +68,6 @@ class CustomerDashboard(QWidget):
             else:
                 welcome_text = "🎬 Welcome!"
         else:
-            # staff/manager view when no customer provided
             welcome_text = "🎬 Welcome, staff member!"
 
         welcome_label = QLabel(welcome_text)
@@ -98,18 +85,14 @@ class CustomerDashboard(QWidget):
         
         layout.addWidget(header_widget)
         
-        # Create tab widget for different customer features
         self.tabs = QTabWidget()
         
-        # Movie Booking Tab
         self.movies_tab = MoviesTab(self.db, self.current_customer_id)
         self.tabs.addTab(self.movies_tab, "🎥 Book Movies")
         
-        # My Bookings Tab  
         self.bookings_tab = MyBookingsTab(self.db, self.current_customer_id)
         self.tabs.addTab(self.bookings_tab, "📋 My Bookings")
         
-        # Profile Tab
         self.profile_tab = ProfileTab(self.db, self.current_customer_id, self.user_data)
         self.tabs.addTab(self.profile_tab, "👤 My Profile")
         
@@ -120,28 +103,28 @@ class CustomerDashboard(QWidget):
     def apply_styles(self):
         self.setStyleSheet("""
             QTabWidget::pane {
-                border: 1px solid #bdc3c7;
+                border: 1px solid
                 border-radius: 5px;
                 background-color: white;
             }
             QTabBar::tab {
-                background-color: #ecf0f1;
-                border: 1px solid #bdc3c7;
+                background-color:
+                border: 1px solid
                 padding: 8px 15px;
                 margin-right: 2px;
                 border-top-left-radius: 5px;
                 border-top-right-radius: 5px;
             }
             QTabBar::tab:selected {
-                background-color: #3498db;
+                background-color:
                 color: white;
             }
             QTabBar::tab:hover {
-                background-color: #2980b9;
+                background-color:
                 color: white;
             }
             QPushButton {
-                background-color: #3498db;
+                background-color:
                 color: white;
                 border: none;
                 border-radius: 5px;
@@ -149,10 +132,10 @@ class CustomerDashboard(QWidget):
                 font-weight: bold;
             }
             QPushButton:hover {
-                background-color: #2980b9;
+                background-color:
             }
             QPushButton:disabled {
-                background-color: #bdc3c7;
+                background-color:
             }
         """)
 
@@ -168,14 +151,12 @@ class MoviesTab(QWidget):
     def init_ui(self):
         layout = QVBoxLayout()
         
-        # Title
         title = QLabel("🎬 Now Showing - Book Your Tickets")
         title.setFont(QFont("Arial", 18, QFont.Weight.Bold))
         title.setStyleSheet("color: #2c3e50; margin: 10px;")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
         
-        # Movies grid scroll area
         scroll_area = QScrollArea()
         scroll_widget = QWidget()
         self.movies_layout = QGridLayout(scroll_widget)
@@ -190,7 +171,6 @@ class MoviesTab(QWidget):
     def load_movies(self):
         movies = self.db.get_movies()
         
-        # Clear existing movies
         for i in reversed(range(self.movies_layout.count())): 
             self.movies_layout.itemAt(i).widget().setParent(None)
         
@@ -218,14 +198,14 @@ class MoviesTab(QWidget):
         card.setStyleSheet("""
             QFrame {
                 background-color: white;
-                border: 2px solid #bdc3c7;
+                border: 2px solid
                 border-radius: 10px;
                 padding: 15px;
                 margin: 10px;
             }
             QFrame:hover {
-                border-color: #3498db;
-                background-color: #f8f9fa;
+                border-color:
+                background-color:
             }
         """)
         card.setFixedSize(300, 400)
@@ -233,30 +213,25 @@ class MoviesTab(QWidget):
         
         layout = QVBoxLayout(card)
         
-        # Movie title
         title = QLabel(movie['title'])
         title.setFont(QFont("Arial", 14, QFont.Weight.Bold))
         title.setStyleSheet("color: #2c3e50; margin-bottom: 5px;")
         title.setWordWrap(True)
         layout.addWidget(title)
         
-        # Movie details
         details = QLabel(f"🎭 {movie['genre']} | ⏱ {movie['duration_minutes']} min | ⭐ {movie['rating']}")
         details.setStyleSheet("color: #7f8c8d; font-size: 12px; margin-bottom: 10px;")
         layout.addWidget(details)
         
-        # Synopsis (truncated)
         synopsis = QLabel(movie['synopsis'][:150] + "..." if len(movie['synopsis']) > 150 else movie['synopsis'])
         synopsis.setWordWrap(True)
         synopsis.setStyleSheet("color: #555; font-size: 11px; margin-bottom: 10px;")
         layout.addWidget(synopsis)
         
-        # Director and cast
         director = QLabel(f"🎬 Director: {movie['director']}")
         director.setStyleSheet("color: #555; font-size: 11px; margin-bottom: 5px;")
         layout.addWidget(director)
         
-        # Click hint
         hint = QLabel("👆 Click to view available showtimes & details")
         hint.setStyleSheet("color: #3498db; font-size: 10px; font-style: italic; margin-top: 10px;")
         hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -273,25 +248,21 @@ class MoviesTab(QWidget):
         
         layout = QVBoxLayout(dialog)
         
-        # --- Movie Information Section ---
         info_scroll = QScrollArea()
         info_scroll.setWidgetResizable(True)
         info_widget = QWidget()
         info_layout = QVBoxLayout(info_widget)
         
-        # Title
         title = QLabel(f"🎬 {movie['title']}")
         title.setFont(QFont("Arial", 20, QFont.Weight.Bold))
         title.setStyleSheet("color: #2c3e50; margin-bottom: 10px;")
         title.setWordWrap(True)
         info_layout.addWidget(title)
         
-        # Quick Stats
         stats = QLabel(f"<b>Genre:</b> {movie['genre']} &nbsp;|&nbsp; <b>Duration:</b> {movie['duration_minutes']} min &nbsp;|&nbsp; <b>Rating:</b> {movie['rating']}")
         stats.setStyleSheet("color: #000000; font-size: 13px; margin-bottom: 15px;")
         info_layout.addWidget(stats)
         
-        # Full Synopsis
         synopsis_label = QLabel("<b>📝 Synopsis:</b>")
         synopsis_label.setStyleSheet("color: #2c3e50; font-size: 14px; margin-top: 10px;")
         info_layout.addWidget(synopsis_label)
@@ -301,18 +272,15 @@ class MoviesTab(QWidget):
         synopsis_text.setStyleSheet("color: #000000; font-size: 13px; line-height: 1.4; margin-bottom: 15px;")
         info_layout.addWidget(synopsis_text)
         
-        # Director
         director_label = QLabel(f"<b>🎬 Director:</b> {movie['director']}")
         director_label.setStyleSheet("color: #000000; font-size: 13px; margin-bottom: 5px;")
         info_layout.addWidget(director_label)
         
         info_layout.addStretch()
         info_scroll.setWidget(info_widget)
-        # Give info section about 40% of height
         layout.addWidget(info_scroll, stretch=4)
         
         
-        # --- Showtimes Section ---
         screenings = self.db.get_screenings(movie['movie_id'])
         
         showtimes_label = QLabel("📅 Available Showtimes")
@@ -323,16 +291,16 @@ class MoviesTab(QWidget):
         showtimes_list = QListWidget()
         showtimes_list.setStyleSheet("""
             QListWidget {
-                border: 1px solid #bdc3c7;
+                border: 1px solid
                 border-radius: 5px;
                 padding: 5px;
             }
             QListWidget::item {
                 padding: 10px;
-                border-bottom: 1px solid #eee;
+                border-bottom: 1px solid
             }
             QListWidget::item:selected {
-                background-color: #3498db;
+                background-color:
                 color: white;
             }
         """)
@@ -348,29 +316,28 @@ class MoviesTab(QWidget):
             
         layout.addWidget(showtimes_list, stretch=3)
         
-        # Buttons
         button_layout = QHBoxLayout()
         book_btn = QPushButton("🎟 Book Selected Showtime")
         book_btn.setStyleSheet("""
             QPushButton {
-                background-color: #27ae60; 
+                background-color:
                 color: white; 
                 padding: 10px; 
                 font-weight: bold; 
                 border-radius: 5px;
             }
-            QPushButton:hover { background-color: #219150; }
+            QPushButton:hover { background-color:
         """)
         
         close_btn = QPushButton("Close")
         close_btn.setStyleSheet("""
             QPushButton {
-                background-color: #7f8c8d; 
+                background-color:
                 color: white; 
                 padding: 10px; 
                 border-radius: 5px;
             }
-            QPushButton:hover { background-color: #95a5a6; }
+            QPushButton:hover { background-color:
         """)
         
         if screenings:
@@ -390,13 +357,11 @@ class MoviesTab(QWidget):
     def book_screening(self, screening, dialog):
         dialog.accept()
         
-        # Get available seats
         available_seats = self.db.get_available_seats(screening['screening_id'])
         if not available_seats:
             QMessageBox.warning(self, "Sold Out", "No available seats for this screening!")
             return
         
-        # Show shared seat selection dialog
         from seat_selection_dialog import SeatSelectionDialog
         dialog = SeatSelectionDialog(available_seats, parent=self)
         
@@ -405,18 +370,15 @@ class MoviesTab(QWidget):
             selected_seat_ids = dialog.get_selected_seats()
             
         if selected_seat_ids:
-            # Calculate total amount
             seat_ids = list(selected_seat_ids)
             total_amount = float(screening['ticket_price']) * len(seat_ids)
-            # Show Payment Screen
             from payment_dialog import PaymentDialog
             payment_dialog = PaymentDialog(total_amount, parent=self)
             if payment_dialog.exec() != QDialog.DialogCode.Accepted:
-                return # User cancelled payment
+                return
 
             method = payment_dialog.get_payment_method()
 
-            # Create booking with pending status
             booking_id = self.db.create_booking(
                 self.customer_id, 
                 screening['screening_id'], 
@@ -433,7 +395,7 @@ class MoviesTab(QWidget):
                                       f"Booking ID: {booking_id}\n"
                                       f"Status: Pending Approval\n"
                                       f"Please wait for an employee to confirm your booking.")
-                self.load_movies()  # Refresh available movies
+                self.load_movies()
             else:
                 QMessageBox.critical(self, "Booking Failed", "Failed to create booking. Please try again.")
 
@@ -448,19 +410,16 @@ class MyBookingsTab(QWidget):
     def init_ui(self):
         layout = QVBoxLayout()
         
-        # Title
         title = QLabel("📋 My Bookings & Refunds")
         title.setFont(QFont("Arial", 16, QFont.Weight.Bold))
         title.setStyleSheet("color: #2c3e50; margin: 10px;")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
         
-        # Bookings table
         self.bookings_table = QTableWidget()
         self.bookings_table.setAlternatingRowColors(True)
         layout.addWidget(self.bookings_table)
         
-        # Buttons
         button_layout = QHBoxLayout()
         
         self.refresh_btn = QPushButton("🔄 Refresh")
@@ -500,13 +459,12 @@ class MyBookingsTab(QWidget):
                 elif booking['status'] == 'refunded':
                     status_item.setForeground(Qt.GlobalColor.blue)
                 elif booking['status'] == 'pending_refund':
-                    status_item.setForeground(Qt.GlobalColor.darkYellow)  # Orange/Dark Yellow for pending
+                    status_item.setForeground(Qt.GlobalColor.darkYellow)
                     status_item.setText("Pending Refund")
                 elif booking['status'] == 'cancelled':
                     status_item.setForeground(Qt.GlobalColor.red)
                 self.bookings_table.setItem(row_idx, 6, status_item)
             
-            # Resize columns to content
             header = self.bookings_table.horizontalHeader()
             header.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         else:
@@ -554,17 +512,29 @@ class ProfileTab(QWidget):
         container = QWidget()
         form_layout = QVBoxLayout(container)
         
-        # Title
         title = QLabel("👤 My Profile")
         title.setFont(QFont("Arial", 16, QFont.Weight.Bold))
         title.setStyleSheet("color: #2c3e50; margin: 10px;")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         form_layout.addWidget(title)
         
-        # --- Profile Info (Edit Details) ---
         info_group = QFrame()
         info_group.setFrameStyle(QFrame.Shape.StyledPanel)
-        info_group.setStyleSheet("background-color: white; border-radius: 5px; border: 1px solid #ddd; padding: 10px;")
+        info_group.setStyleSheet("""
+            QFrame {
+                background-color: white; 
+                border-radius: 5px; 
+                border: 1px solid
+                padding: 10px;
+            }
+            QLineEdit {
+                color: black;
+                background-color:
+                border: 1px solid
+                padding: 5px;
+                border-radius: 4px;
+            }
+        """)
         info_layout = QFormLayout(info_group)
         
         self.username_label = QLabel()
@@ -588,10 +558,24 @@ class ProfileTab(QWidget):
         
         form_layout.addWidget(info_group)
         
-        # --- Change Password Section ---
         pass_group = QFrame()
         pass_group.setFrameStyle(QFrame.Shape.StyledPanel)
-        pass_group.setStyleSheet("background-color: white; border-radius: 5px; border: 1px solid #ddd; padding: 10px; margin-top: 20px;")
+        pass_group.setStyleSheet("""
+            QFrame {
+                background-color: white; 
+                border-radius: 5px; 
+                border: 1px solid
+                padding: 10px; 
+                margin-top: 20px;
+            }
+            QLineEdit {
+                color: black;
+                background-color:
+                border: 1px solid
+                padding: 5px;
+                border-radius: 4px;
+            }
+        """)
         pass_layout = QFormLayout(pass_group)
         
         pass_title = QLabel("🔒 Change Password")
@@ -625,7 +609,6 @@ class ProfileTab(QWidget):
         profile = self.db.get_customer_profile(self.customer_id)
         
         if not profile:
-            # Fallback to user_data if db fetch fails (though it shouldn't)
             print(f"load_profile: full profile fetch failed for id: {self.customer_id}")
             if self.user_data:
                 self.username_label.setText(self.user_data.get('username', ''))

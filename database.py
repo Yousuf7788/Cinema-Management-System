@@ -11,7 +11,6 @@ class Database:
     def connect(self, server: str, database: str, username: str = None, password: str = None) -> bool:
         try:
             if username and password:
-                # SQL Authentication (recommended for macOS/Docker)
                 connection_string = (
                     f"DRIVER={{ODBC Driver 18 for SQL Server}};"
                     f"SERVER={server};"
@@ -22,8 +21,6 @@ class Database:
                     f"TrustServerCertificate=yes;"
                 )
             else:
-                # Windows Authentication DOES NOT WORK on macOS,
-                # but kept here for compatibility — it will fail silently.
                 connection_string = (
                     f"DRIVER={{ODBC Driver 18 for SQL Server}};"
                     f"SERVER={server};"
@@ -54,7 +51,6 @@ class Database:
         Compare password directly to stored plaintext value.
         """
         try:
-            # Defensive: ensure types are str
             return str(password) == str(stored)
         except Exception as e:
             self.logger.error(f"verify_password error: {e}")
@@ -66,26 +62,20 @@ class Database:
         try:
             cursor = self.connection.cursor()
             
-            # Check if username or email already exists
             cursor.execute("SELECT user_id FROM Users WHERE username = ? OR email = ?", (username, email))
             if cursor.fetchone():
                 return False, "Username or email already exists"
             
-            # Insert into Users table first (customer_id NULL initially)
-            # Insert into Users table (store plaintext password)
-            plain_password = self.hash_password(password)  # now returns plaintext
+            plain_password = self.hash_password(password)
             cursor.execute(
                 "INSERT INTO Users (username, password_hash, email, user_type) OUTPUT INSERTED.user_id VALUES (?, ?, ?, ?)",
                 username, plain_password, email, user_type
             )
             user_id = cursor.fetchone()[0]
             
-            # Insert into Customer table using user_id as customer_id
             if phone:
                 import re
                 phone = re.sub(r'\D', '', phone)  # Remove all non-digit characters
-                # if not phone:
-                #     phone = None  # REMOVED: garbage input should fail length check, not become None
                 if len(phone) != 11:
                     self.logger.error(f"Phone number must be exactly 11 digits. Got: {len(phone)}")
                     self.connection.rollback()
@@ -102,7 +92,6 @@ class Database:
                 user_id, first_name, last_name, phone
             )
             
-            # Update Users table to link back to customer_id (which is same as user_id)
             cursor.execute(
                 "UPDATE Users SET customer_id = ? WHERE user_id = ?",
                 user_id, user_id
@@ -145,16 +134,14 @@ class Database:
             print("DEBUG: authenticate_user - no user found for:", username)
             return None
 
-        # get stored value (works for pyodbc row or tuple)
         try:
             stored = getattr(user, 'password_hash', None)
             if stored is None:
-                stored = user[2]  # fallback index
+                stored = user[2]
         except Exception as e:
             print("DEBUG: could not extract stored password:", e)
             return None
 
-        # normalize stored to string and compare plaintext
         try:
             stored_str = str(stored).strip()
         except Exception as e:
@@ -172,7 +159,6 @@ class Database:
         if not pw_ok:
             return None
 
-        # Build user_data dict (defensive)
         def get(attr, idx):
             try:
                 return getattr(user, attr, None) or (user[idx] if len(user) > idx else None)
@@ -284,7 +270,6 @@ class Database:
         try:
             cursor = self.connection.cursor()
             
-            # This query gets ALL seats for the hall and checks if they are booked for this screening
             query = """
                 SELECT 
                     s.seat_id, 
@@ -319,10 +304,7 @@ class Database:
         try:
             cursor = self.connection.cursor()
             
-            # Start transaction (Implicitly managed by pyodbc with autocommit=False)
-            # cursor.execute("BEGIN TRANSACTION") - REMOVED: caused nested transaction issues
             
-            # 1. Create Booking
             cursor.execute("""
                 INSERT INTO Booking (customer_id, screening_id, total_amount)
                 OUTPUT INSERTED.booking_id
@@ -331,14 +313,12 @@ class Database:
             
             booking_id = cursor.fetchone()[0]
             
-            # 2. Link Seats
             for seat_id in seat_ids:
                 cursor.execute("""
                     INSERT INTO Booking_Seat (booking_id, seat_id)
                     VALUES (?, ?)
                 """, (booking_id, seat_id))
             
-            # Create payment
             cursor.execute(
                 "INSERT INTO Payment (booking_id, amount, payment_method, payment_status, payment_date) VALUES (?, ?, ?, ?, GETDATE())",
                 (booking_id, total_amount, payment_method, payment_status)
@@ -391,7 +371,6 @@ class Database:
                 ORDER BY b.booking_date DESC;
             """)
 
-            # Convert each row into a dict using column names
             return [
                 dict(zip([column[0] for column in cursor.description], row))
                 for row in cursor.fetchall()
@@ -429,19 +408,16 @@ class Database:
         try:
             cursor = self.connection.cursor()
             
-            # Get payment ID for the booking
             cursor.execute("SELECT payment_id FROM Payment WHERE booking_id = ?", (booking_id,))
             payment = cursor.fetchone()
             if not payment:
                 return False
             
-            # Create refund request
             cursor.execute(
                 "INSERT INTO Refund (payment_id, refund_amount, refund_reason, status) VALUES (?, ?, ?, 'pending')",
-                payment[0], 0, reason  # Amount will be updated by employee
+                payment[0], 0, reason
             )
             
-            # Update booking status to 'pending_refund' instead of 'refunded'
             cursor.execute("UPDATE Booking SET status = 'pending_refund' WHERE booking_id = ?", (booking_id,))
             
             self.connection.commit()
@@ -520,13 +496,11 @@ class Database:
             cursor = self.connection.cursor()
             
             if status == 'approved' and refund_amount:
-                # Update refund status
                 cursor.execute(
                     "UPDATE Refund SET status = ?, processed_by_employee_id = ?, refund_amount = ? WHERE refund_id = ?",
                     status, employee_id, refund_amount, refund_id
                 )
                 
-                # Update booking status to REFUNDED using subquery
                 cursor.execute("""
                     UPDATE Booking 
                     SET status = 'refunded' 
@@ -540,13 +514,11 @@ class Database:
                 """, (refund_id,))
                         
             elif status == 'rejected':
-                # Update refund status
                 cursor.execute(
                     "UPDATE Refund SET status = ?, processed_by_employee_id = ? WHERE refund_id = ?",
                     status, employee_id, refund_id
                 )
                 
-                # Revert booking status to CONFIRMED using subquery
                 cursor.execute("""
                     UPDATE Booking 
                     SET status = 'confirmed' 
@@ -559,7 +531,6 @@ class Database:
                     )
                 """, (refund_id,))
             else:
-                # Handle other statuses if necessary, or just fallback update
                 cursor.execute(
                     "UPDATE Refund SET status = ?, processed_by_employee_id = ? WHERE refund_id = ?",
                     status, employee_id, refund_id
@@ -578,14 +549,12 @@ class Database:
         try:
             cursor = self.connection.cursor()
             
-            # Insert into Movie table
             cursor.execute(
                 "INSERT INTO Movie (title, genre, duration_minutes, rating) OUTPUT INSERTED.movie_id VALUES (?, ?, ?, ?)",
                 title, genre, duration, rating
             )
             movie_id = cursor.fetchone()[0]
             
-            # Insert into Movie_Details table
             cursor.execute(
                 "INSERT INTO Movie_Details (movie_id, director, cast, synopsis, release_date) VALUES (?, ?, ?, ?, ?)",
                 movie_id, director, cast, synopsis, release_date
@@ -617,13 +586,11 @@ class Database:
         try:
             cursor = self.connection.cursor()
             
-            # Update Customer table
             cursor.execute(
                 "UPDATE Customer SET first_name = ?, last_name = ?, phone_number = ? WHERE customer_id = ?",
                 first_name, last_name, phone, customer_id
             )
             
-            # Update Users table (email)
             cursor.execute(
                 "UPDATE Users SET email = ? WHERE customer_id = ?",
                 email, customer_id
@@ -640,7 +607,6 @@ class Database:
         try:
             cursor = self.connection.cursor()
             
-            # Note: Storing plaintext as per existing pattern (though insecure)
             plain_password = self.hash_password(new_password)
             
             cursor.execute(
@@ -685,11 +651,9 @@ class Database:
         server = "localhost"  # Change to your SQL Server instance
         database = "CinemaDB"  # Your database name
         
-        # Option 1: Windows Authentication (recommended)
         if self.connect(server, database):
             return True
         
-        # Option 2: SQL Server Authentication
         username = "sa"  # Your SQL Server username
         password = "YourPassword123"  # Your SQL Server password
         if self.connect(server, database, username, password):

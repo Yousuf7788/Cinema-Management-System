@@ -1,4 +1,3 @@
-# screening_tab.py - INTEGRATED VERSION
 from PyQt6.QtWidgets import QTableWidgetItem, QMessageBox, QHeaderView, QDoubleSpinBox, QFormLayout
 from PyQt6.QtCore import Qt, QDateTime
 from PyQt6.QtGui import QColor
@@ -32,7 +31,6 @@ class ScreeningTab(BaseTab, Ui_ScreeningTab):
         self.refreshScreeningBtn.clicked.connect(self.refresh_data)
         self.screeningTable.itemSelectionChanged.connect(self.on_row_selected)
         
-        # Auto-calculate end time when movie or start time changes
         self.movieCombo.currentIndexChanged.connect(self.calculate_end_time)
         self.movieCombo.currentIndexChanged.connect(self.calculate_end_time)
         self.startTimeInput.dateTimeChanged.connect(self.calculate_end_time)
@@ -41,13 +39,11 @@ class ScreeningTab(BaseTab, Ui_ScreeningTab):
     def setup_form(self):
         """Initialize form values"""
         self.startTimeInput.setDateTime(QDateTime.currentDateTime())
-        self.endTimeInput.setDateTime(QDateTime.currentDateTime().addSecs(7200))  # +2 hours
+        self.endTimeInput.setDateTime(QDateTime.currentDateTime().addSecs(7200))
     
     def add_price_input(self):
         """Add ticket price input to the form if it doesn't exist"""
-        # Check if price input already exists in UI
         if not hasattr(self, 'priceInput'):
-            # Find a layout to add the price input
             for i in range(self.layout().count()):
                 widget = self.layout().itemAt(i).widget()
                 if widget and hasattr(widget, 'layout'):
@@ -64,7 +60,6 @@ class ScreeningTab(BaseTab, Ui_ScreeningTab):
     def apply_permissions(self):
         """Apply role-based permissions"""
         if not self.is_manager:
-            # Regular employees cannot manage screenings
             self.addScreeningBtn.hide()
             self.updateScreeningBtn.hide()
             self.deleteScreeningBtn.hide()
@@ -72,7 +67,6 @@ class ScreeningTab(BaseTab, Ui_ScreeningTab):
             self.updateScreeningBtn.setEnabled(False)
             self.deleteScreeningBtn.setEnabled(False)
             
-            # Disable form inputs for non-managers
             self.movieCombo.setEnabled(False)
             self.hallCombo.setEnabled(False)
             self.startTimeInput.setEnabled(False)
@@ -82,14 +76,12 @@ class ScreeningTab(BaseTab, Ui_ScreeningTab):
     
     def load_dynamic_data(self):
         """Load combo box data using new database methods"""
-        # Load movies
         movies = self.db.get_movies()
         self.movieCombo.clear()
         if movies:
             for movie in movies:
                 self.movieCombo.addItem(movie['title'], movie['movie_id'])
         
-        # Load halls
         halls = self.db.get_halls()
         self.hallCombo.clear()
         if halls:
@@ -103,16 +95,13 @@ class ScreeningTab(BaseTab, Ui_ScreeningTab):
         start_time = self.startTimeInput.dateTime()
         
         if movie_id:
-            # Get movie duration from database
             movies = self.db.get_movies()
             for movie in movies:
                 if movie['movie_id'] == movie_id:
                     duration_minutes = movie['duration_minutes']
-                    # Add movie duration + 30 minutes for cleaning/prep
                     end_time = start_time.addSecs((duration_minutes + 30) * 60)
                     self.endTimeInput.setDateTime(end_time)
                     
-                    # Auto-set price based on hall type
                     self.set_auto_price()
                     break
     
@@ -124,7 +113,7 @@ class ScreeningTab(BaseTab, Ui_ScreeningTab):
             for hall in halls:
                 if hall['hall_id'] == hall_id:
                     name = hall.get('hall_name', '').upper()
-                    price = 12.00  # Default standard price
+                    price = 12.00
                     
                     if 'IMAX' in name:
                         price = 20.00
@@ -165,11 +154,9 @@ class ScreeningTab(BaseTab, Ui_ScreeningTab):
                 self.screeningTable.setItem(row_idx, 3, QTableWidgetItem(str(screening['start_time'])))
                 self.screeningTable.setItem(row_idx, 4, QTableWidgetItem(str(screening['end_time'])))
                 
-                # Format price
                 price_item = QTableWidgetItem(f"${screening['ticket_price']:.2f}")
                 self.screeningTable.setItem(row_idx, 5, price_item)
                 
-                # Show available seats with color coding
                 available_seats = screening.get('available_seats', 0)
                 seats_item = QTableWidgetItem(str(available_seats))
                 
@@ -182,7 +169,6 @@ class ScreeningTab(BaseTab, Ui_ScreeningTab):
                     
                 self.screeningTable.setItem(row_idx, 6, seats_item)
             
-            # Resize columns to content
             header = self.screeningTable.horizontalHeader()
             header.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         else:
@@ -206,14 +192,12 @@ class ScreeningTab(BaseTab, Ui_ScreeningTab):
             self.show_error_message("Error", "Movie and Hall selection are required!")
             return
         
-        # Validate time range
         start_dt = self.startTimeInput.dateTime()
         end_dt = self.endTimeInput.dateTime()
         if end_dt <= start_dt:
             self.show_error_message("Error", "End time must be after start time!")
             return
         
-        # Check for scheduling conflicts
         if self.has_scheduling_conflict(hall_id, start_time, end_time):
             self.show_error_message(
                 "Scheduling Conflict", 
@@ -221,7 +205,6 @@ class ScreeningTab(BaseTab, Ui_ScreeningTab):
             )
             return
         
-        # Add screening using new database method
         success = self.db.add_screening(movie_id, hall_id, start_time, end_time, ticket_price)
         
         if success:
@@ -269,14 +252,12 @@ class ScreeningTab(BaseTab, Ui_ScreeningTab):
         end_time = self.endTimeInput.dateTime().toString("yyyy-MM-dd HH:mm:ss")
         ticket_price = self.priceInput.value() if hasattr(self, 'priceInput') else 12.50
         
-        # Validate time range
         start_dt = self.startTimeInput.dateTime()
         end_dt = self.endTimeInput.dateTime()
         if end_dt <= start_dt:
             self.show_error_message("Error", "End time must be after start time!")
             return
         
-        # Check for scheduling conflicts (excluding current screening)
         if self.has_scheduling_conflict_excluding_current(hall_id, start_time, end_time, screening_id):
             self.show_error_message(
                 "Scheduling Conflict", 
@@ -334,7 +315,6 @@ class ScreeningTab(BaseTab, Ui_ScreeningTab):
         movie_title = self.screeningTable.item(selected_items[0].row(), 1).text()
         hall_name = self.screeningTable.item(selected_items[0].row(), 2).text()
         
-        # Check if there are existing bookings for this screening
         if self.has_existing_bookings(screening_id):
             self.show_error_message(
                 "Cannot Delete", 
@@ -368,7 +348,7 @@ class ScreeningTab(BaseTab, Ui_ScreeningTab):
             return count > 0
         except Exception as e:
             self.logger.error(f"Error checking existing bookings: {e}")
-            return True  # Err on the side of caution
+            return True
     
     def clear_form(self):
         """Clear form fields"""
@@ -382,22 +362,19 @@ class ScreeningTab(BaseTab, Ui_ScreeningTab):
     def on_row_selected(self):
         """Populate form when row is selected"""
         selected_items = self.screeningTable.selectedItems()
-        if selected_items and self.is_manager:  # Only populate if user can edit
+        if selected_items and self.is_manager:
             row = selected_items[0].row()
             
-            # Set movie
             movie_title = self.screeningTable.item(row, 1).text()
             index = self.movieCombo.findText(movie_title)
             if index >= 0:
                 self.movieCombo.setCurrentIndex(index)
             
-            # Set hall
             hall_name = self.screeningTable.item(row, 2).text().split(' (')[0]  # Remove seat count
             index = self.hallCombo.findText(hall_name, Qt.MatchFlag.MatchContains)
             if index >= 0:
                 self.hallCombo.setCurrentIndex(index)
             
-            # Set price if available
             if hasattr(self, 'priceInput') and self.screeningTable.columnCount() > 5:
                 price_text = self.screeningTable.item(row, 5).text()
                 if price_text.startswith('$'):

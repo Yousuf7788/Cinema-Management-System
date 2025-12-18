@@ -1,4 +1,3 @@
-# manager_dashboard.py - ENHANCED VERSION
 from employee_dashboard import EmployeeDashboard
 from PyQt6.QtWidgets import QMessageBox, QMenu
 from PyQt6.QtCore import pyqtSignal, Qt
@@ -7,26 +6,20 @@ from PyQt6.QtPrintSupport import QPrinter, QPrintDialog
 import datetime
 
 class ManagerDashboard(EmployeeDashboard):
-    # Inherits everything from EmployeeDashboard but can have additional manager-only features
     
     def __init__(self, db, user_data):
-        # Let parent store user_data, set flags and call init_ui()
         super().__init__(db, user_data)
 
-        # Defensive: ensure we actually have a dict
         if not isinstance(user_data, dict):
             print("ERROR: ManagerDashboard expected user_data dict but got:", repr(user_data), type(user_data))
             return
 
-        # Store references consistently (keeps compatibility)
         self.db = db
         self.user_data = user_data
         self.current_user = user_data
 
-        # Use .get to avoid KeyError if the key is missing
         self.current_customer_id = user_data.get('customer_id')
 
-        # Set a safe window title (handles missing names)
         first = user_data.get('first_name') or ''
         last = user_data.get('last_name') or ''
         title_name = (first + ' ' + last).strip()
@@ -35,20 +28,15 @@ class ManagerDashboard(EmployeeDashboard):
         else:
             self.setWindowTitle("🎯 Cinema Management System - Manager Portal")
 
-        # Add manager-only UI pieces (do NOT call init_ui() again)
-        # ensure add_manager_features exists and is callable
         if hasattr(self, 'add_manager_features') and callable(self.add_manager_features):
             self.add_manager_features()
     
     def add_manager_features(self):
         """Add additional manager-only features"""
-        # Add a reports/analytics tab
         self.add_reports_tab()
         
-        # Add employee management features to customer tab
         self.enhance_customer_tab()
         
-        # Update header to show manager status more prominently
         self.update_header()
     
     def add_reports_tab(self):
@@ -60,17 +48,14 @@ class ManagerDashboard(EmployeeDashboard):
         reports_tab = QWidget()
         layout = QVBoxLayout(reports_tab)
         
-        # Title
         title = QLabel("📊 Manager Reports & Analytics")
         title.setFont(QFont("Arial", 16, QFont.Weight.Bold))
         title.setStyleSheet("color: #2c3e50; margin: 10px;")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
         
-        # Quick stats
         stats_layout = QHBoxLayout()
         
-        # Revenue stats
         revenue_group = QGroupBox("💰 Revenue Overview")
         revenue_layout = QFormLayout()
         
@@ -85,7 +70,6 @@ class ManagerDashboard(EmployeeDashboard):
         revenue_group.setLayout(revenue_layout)
         stats_layout.addWidget(revenue_group)
         
-        # Booking stats
         booking_group = QGroupBox("📈 Booking Statistics")
         booking_layout = QFormLayout()
         
@@ -100,7 +84,6 @@ class ManagerDashboard(EmployeeDashboard):
         booking_group.setLayout(booking_layout)
         stats_layout.addWidget(booking_group)
         
-        # Movie stats
         movie_group = QGroupBox("🎬 Movie Performance")
         movie_layout = QFormLayout()
         
@@ -117,7 +100,6 @@ class ManagerDashboard(EmployeeDashboard):
         
         layout.addLayout(stats_layout)
         
-        # Action buttons
         action_layout = QHBoxLayout()
         
         self.generate_report_btn = QPushButton("📄 Generate Detailed Report")
@@ -132,16 +114,13 @@ class ManagerDashboard(EmployeeDashboard):
         
         layout.addLayout(action_layout)
         
-        # Add the reports tab
         self.tabs.addTab(reports_tab, "📊 Reports")
         
-        # Load initial statistics
         self.load_statistics()
     
     def load_statistics(self):
         """Load and display management statistics"""
         try:
-            # Revenue statistics
             total_revenue = self.calculate_total_revenue()
             daily_revenue = self.calculate_daily_revenue()
             avg_booking = self.calculate_average_booking_value()
@@ -150,13 +129,11 @@ class ManagerDashboard(EmployeeDashboard):
             self.daily_revenue_label.setText(f"${daily_revenue:,.2f}")
             self.avg_booking_label.setText(f"${avg_booking:,.2f}")
             
-            # Booking statistics
             booking_stats = self.calculate_booking_statistics()
             self.total_bookings_label.setText(str(booking_stats['total']))
             self.confirmed_bookings_label.setText(str(booking_stats['confirmed']))
             self.refund_rate_label.setText(f"{booking_stats['refund_rate']:.1f}%")
             
-            # Movie statistics
             movie_stats = self.calculate_movie_statistics()
             self.total_movies_label.setText(str(movie_stats['total_movies']))
             self.most_popular_label.setText(movie_stats['most_popular'])
@@ -217,15 +194,12 @@ class ManagerDashboard(EmployeeDashboard):
         try:
             cursor = self.db.connection.cursor()
             
-            # Total bookings
             cursor.execute("SELECT COUNT(*) FROM Booking")
             total = cursor.fetchone()[0]
             
-            # Confirmed bookings
             cursor.execute("SELECT COUNT(*) FROM Booking WHERE status = 'confirmed'")
             confirmed = cursor.fetchone()[0]
             
-            # Refund rate
             cursor.execute("SELECT COUNT(*) FROM Booking WHERE status = 'refunded'")
             refunded = cursor.fetchone()[0]
             refund_rate = (refunded / total * 100) if total > 0 else 0
@@ -244,11 +218,9 @@ class ManagerDashboard(EmployeeDashboard):
         try:
             cursor = self.db.connection.cursor()
 
-            # Total movies
             cursor.execute("SELECT COUNT(*) FROM Movie")
             total_movies = cursor.fetchone()[0] or 0
 
-            # Most popular movie (by confirmed booking count)
             cursor.execute("""
                 SELECT TOP 1 m.title, COUNT(b.booking_id) as booking_count
                 FROM Movie m
@@ -260,8 +232,6 @@ class ManagerDashboard(EmployeeDashboard):
             popular_result = cursor.fetchone()
             most_popular = popular_result[0] if popular_result else "N/A"
 
-            # Average rating — use TRY_CONVERT to avoid conversion errors from bad varchar values.
-            # NULLIF(LTRIM(RTRIM(rating)), '') converts empty strings to NULL so AVG ignores them.
             cursor.execute("""
                 SELECT AVG(TRY_CONVERT(float, NULLIF(LTRIM(RTRIM(rating)), ''))) AS avg_rating
                 FROM Movie
@@ -270,7 +240,6 @@ class ManagerDashboard(EmployeeDashboard):
             avg_rating_result = cursor.fetchone()
             avg_value = avg_rating_result[0] if avg_rating_result else None
 
-            # Format avg_rating for display; guard against None
             avg_rating = f"{avg_value:.1f}" if isinstance(avg_value, (float, int)) else "N/A"
 
             return {
@@ -280,25 +249,20 @@ class ManagerDashboard(EmployeeDashboard):
             }
 
         except Exception as e:
-            # print/log friendly error and return safe defaults
             print(f"Error calculating movie statistics: {e}")
             return {'total_movies': 0, 'most_popular': 'N/A', 'avg_rating': 'N/A'}
 
     def enhance_customer_tab(self):
         """Add manager-specific features to customer management"""
-        # This would add extra manager functionality to the customer tab
-        # For example: bulk operations, customer analytics, etc.
         pass
     
     def update_header(self):
         """Update header to show manager status prominently"""
-        # The header is already updated in the parent class, but we can enhance it further
         pass
     
     def generate_detailed_report(self):
         """Generate a detailed management report"""
         try:
-            # Collect comprehensive data
             report_data = {
                 'timestamp': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 'revenue': {
@@ -311,7 +275,6 @@ class ManagerDashboard(EmployeeDashboard):
                 'refunds': len(self.db.get_pending_refunds())
             }
             
-            # Generate report text
             report_text = f"""
 🎬 CINEMA MANAGEMENT SYSTEM - MANAGER REPORT
 Generated: {report_data['timestamp']}
@@ -343,7 +306,6 @@ Pending Refunds: {report_data['refunds']}
 Report generated by: {self.user_data['first_name']} {self.user_data['last_name']}
             """.strip()
             
-            # Show report in dialog
             from PyQt6.QtWidgets import QDialog, QTextEdit, QVBoxLayout, QPushButton, QHBoxLayout
             from PyQt6.QtPrintSupport import QPrintDialog, QPrinter
             from PyQt6.QtGui import QTextDocument
@@ -355,13 +317,11 @@ Report generated by: {self.user_data['first_name']} {self.user_data['last_name']
             
             layout = QVBoxLayout(dialog)
             
-            # Report text area
             text_edit = QTextEdit()
             text_edit.setPlainText(report_text)
             text_edit.setReadOnly(True)
             layout.addWidget(text_edit)
             
-            # Action buttons
             button_layout = QHBoxLayout()
             
             print_btn = QPushButton("🖨️ Print Report")

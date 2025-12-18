@@ -11,14 +11,14 @@ class PaymentDialog(QDialog):
         self.setFixedSize(400, 350)
         self.setStyleSheet("""
             QDialog {
-                background-color: #ecf0f1;
+                background-color:
             }
             QLabel {
-                color: #2c3e50;
+                color:
             }
             QComboBox {
                 padding: 8px;
-                border: 1px solid #bdc3c7;
+                border: 1px solid
                 border-radius: 4px;
                 background-color: white;
             }
@@ -27,19 +27,19 @@ class PaymentDialog(QDialog):
                 border-radius: 5px;
                 font-weight: bold;
             }
-            QPushButton#payBtn {
-                background-color: #27ae60;
+            QPushButton
+                background-color:
                 color: white;
             }
-            QPushButton#payBtn:hover {
-                background-color: #2ecc71;
+            QPushButton
+                background-color:
             }
-            QPushButton#cancelBtn {
-                background-color: #e74c3c;
+            QPushButton
+                background-color:
                 color: white;
             }
-            QPushButton#cancelBtn:hover {
-                background-color: #c0392b;
+            QPushButton
+                background-color:
             }
         """)
         
@@ -50,13 +50,11 @@ class PaymentDialog(QDialog):
         layout.setSpacing(20)
         layout.setContentsMargins(30, 30, 30, 30)
         
-        # Header
         header = QLabel("Complete Your Purchase")
         header.setFont(QFont("Arial", 16, QFont.Weight.Bold))
         header.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(header)
         
-        # Amount Display
         amount_frame = QFrame()
         amount_frame.setStyleSheet("background-color: white; border-radius: 10px; border: 1px solid #ddd;")
         amount_layout = QVBoxLayout(amount_frame)
@@ -74,7 +72,6 @@ class PaymentDialog(QDialog):
         amount_layout.addWidget(price)
         layout.addWidget(amount_frame)
         
-        # Payment Method
         method_label = QLabel("Select Payment Method:")
         method_label.setFont(QFont("Arial", 12))
         layout.addWidget(method_label)
@@ -83,7 +80,6 @@ class PaymentDialog(QDialog):
         self.method_combo.addItems(["Cash", "Credit Card", "Debit Card", "PayPal", "Apple Pay", "Google Pay"])
         layout.addWidget(self.method_combo)
         
-        # Buttons
         btn_layout = QHBoxLayout()
         
         self.cancel_btn = QPushButton("Cancel")

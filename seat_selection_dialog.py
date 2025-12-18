@@ -15,16 +15,13 @@ class SeatSelectionDialog(QDialog):
         
         main_layout = QVBoxLayout(self)
         
-        # Header
         header = QLabel("Please select your seats")
         header.setStyleSheet("font-size: 16px; font-weight: bold; margin: 10px;")
         header.setAlignment(Qt.AlignmentFlag.AlignCenter)
         main_layout.addWidget(header)
         
-        # Legend
         self.create_legend(main_layout)
         
-        # Scroll Area for Grid
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setStyleSheet("QScrollArea { border: none; background-color: #f0f0f0; }")
@@ -33,10 +30,9 @@ class SeatSelectionDialog(QDialog):
         container_layout = QVBoxLayout(container_widget)
         container_layout.setSpacing(20)
         
-        # Screen visuals
         screen_label = QLabel("SCREEN")
         screen_label.setStyleSheet("""
-            background-color: #95a5a6; 
+            background-color:
             color: white; 
             font-weight: bold; 
             padding: 5px;
@@ -46,13 +42,11 @@ class SeatSelectionDialog(QDialog):
         screen_label.setFixedHeight(30)
         container_layout.addWidget(screen_label)
         
-        # Grid for seats
         seat_grid = QGridLayout()
         seat_grid.setSpacing(10)
         seat_grid.setAlignment(Qt.AlignmentFlag.AlignCenter)
         container_layout.addLayout(seat_grid)
         
-        # Organize seats by row
         rows = {}
         for seat in self.all_seats:
             r = seat['row_letter']
@@ -63,16 +57,13 @@ class SeatSelectionDialog(QDialog):
         sorted_keys = sorted(rows.keys())
         
         for row_idx, row_curr in enumerate(sorted_keys):
-            # Sort seats by number
             row_seats = sorted(rows[row_curr], key=lambda x: int(x['seat_number']) if str(x['seat_number']).isdigit() else 999)
             
-            # Row Label (Left)
             lbl_left = QLabel(row_curr)
             lbl_left.setStyleSheet("font-weight: bold; color: #7f8c8d; font-size: 14px;")
             seat_grid.addWidget(lbl_left, row_idx, 0, Qt.AlignmentFlag.AlignRight)
             
             for i, seat in enumerate(row_seats):
-                # Try to use seat number for column, fallback to index + 1
                 try:
                     seat_num = int(seat['seat_number'])
                     col_idx = seat_num
@@ -84,16 +75,15 @@ class SeatSelectionDialog(QDialog):
                 
                 is_booked = seat.get('status') == 'booked'
                 
-                # Store data
                 btn.setProperty('seat_id', seat['seat_id'])
                 
                 if is_booked:
                     btn.setEnabled(False)
                     btn.setStyleSheet("""
                         QPushButton {
-                            background-color: #bdc3c7;
-                            color: #7f8c8d;
-                            border: 1px solid #95a5a6;
+                            background-color:
+                            color:
+                            border: 1px solid
                             border-radius: 6px;
                             font-weight: bold;
                         }
@@ -101,21 +91,20 @@ class SeatSelectionDialog(QDialog):
                 else:
                     btn.setCheckable(True)
                     btn.setCursor(Qt.CursorShape.PointingHandCursor)
-                    # Green for available
                     btn.setStyleSheet("""
                         QPushButton {
-                            background-color: #2ecc71; 
+                            background-color:
                             color: white; 
-                            border: 1px solid #27ae60;
+                            border: 1px solid
                             border-radius: 6px;
                             font-weight: bold;
                         }
                         QPushButton:checked {
-                            background-color: #3498db;
-                            border: 1px solid #2980b9;
+                            background-color:
+                            border: 1px solid
                         }
                         QPushButton:hover:!checked {
-                            background-color: #27ae60;
+                            background-color:
                         }
                     """)
                     
@@ -130,7 +119,6 @@ class SeatSelectionDialog(QDialog):
                 
                 seat_grid.addWidget(btn, row_idx, col_idx)
                 
-            # Row Label (Right)
             lbl_right = QLabel(row_curr)
             lbl_right.setStyleSheet("font-weight: bold; color: #7f8c8d; font-size: 14px;")
             seat_grid.addWidget(lbl_right, row_idx, 20, Qt.AlignmentFlag.AlignLeft)
@@ -138,7 +126,6 @@ class SeatSelectionDialog(QDialog):
         scroll.setWidget(container_widget)
         main_layout.addWidget(scroll)
         
-        # Buttons
         button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         button_box.accepted.connect(self.accept)
         button_box.rejected.connect(self.reject)

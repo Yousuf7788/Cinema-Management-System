@@ -1,4 +1,3 @@
-# employee_dashboard.py - MODIFIED VERSION
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTabWidget, 
                              QTableWidget, QTableWidgetItem, QMessageBox, QLabel, 
                              QPushButton, QHeaderView, QInputDialog, QDoubleSpinBox,
@@ -18,14 +17,12 @@ class EmployeeDashboard(QWidget):
     def __init__(self, db, user_data):
             super().__init__()
 
-            # Defensive: ensure user_data is a dict
             if not isinstance(user_data, dict):
                 print("ERROR: EmployeeDashboard expected user_data dict but got:", repr(user_data), type(user_data))
                 from PyQt6.QtWidgets import QMessageBox
                 QMessageBox.critical(None, "Internal Error", "Invalid user data passed to Employee Dashboard.")
                 return
 
-            # store user data under both names for compatibility with other modules
             self.db = db
             self.user_data = user_data
             self.current_user = user_data
@@ -37,12 +34,8 @@ class EmployeeDashboard(QWidget):
         ))
             print("DEBUG current_user:", self.current_user)
 
-            # safely extract fields (use .get to avoid KeyError)
-            # store employee id
             self.employee_id = user_data.get('employee_id')
 
-            # check user_type too but DO NOT overwrite a True detection from earlier;
-            # only set to True if we already detected manager OR user_type explicitly says 'manager'
             user_type = user_data.get('user_type')
             if user_type is not None:
                 try:
@@ -51,17 +44,14 @@ class EmployeeDashboard(QWidget):
                 except Exception:
                     pass
 
-            # optional debug print to confirm final value
             print("DEBUG is_manager:", self.is_manager)
 
 
-            # continue initialization
             self.init_ui()
     
     def init_ui(self):
         layout = QVBoxLayout()
         
-        # Header with user info and logout
         header_widget = QWidget()
         header_widget.setStyleSheet("background-color: #2c3e50; padding: 10px;")
         header_layout = QHBoxLayout(header_widget)
@@ -81,37 +71,27 @@ class EmployeeDashboard(QWidget):
         
         layout.addWidget(header_widget)
         
-        # Create tab widget for different employee features
         self.tabs = QTabWidget()
         
-        # Refund Management Tab
         self.refund_tab = RefundManagementTab(self.db, self.employee_id, self.is_manager)
         self.tabs.addTab(self.refund_tab, "💸 Refunds")
         
-        # Movie Management Tab
         self.movie_tab = MovieManagementTab(self.db, self.is_manager)
         self.tabs.addTab(self.movie_tab, "🎬 Movies")
         
-        # Customer Management Tab
-# allow None intentionally for staff/employee view
         self.customer_tab = CustomerDashboard(self.db, None, allow_none=True)
 
 
 
         self.tabs.addTab(self.customer_tab, "👥 Customers")
         
-        # Booking Management Tab
         self.booking_tab = BookingTab(self.db)
         self.tabs.addTab(self.booking_tab, "📋 Bookings")
         
-        # Screening Management Tab (MANAGER ONLY)
         if self.is_manager:
             self.screening_tab = ScreeningTab(self.db, is_manager=True)
             self.tabs.addTab(self.screening_tab, "📅 Screenings")
             
-        # Payment Management Tab (Admin/Manager)
-        # Assuming all employees can see payments? User request said 'employee dashboard'.
-        # Let's add it for all employees for now, or check permissions.
         from payment_tab import PaymentTab
         self.payment_tab = PaymentTab(self.db, user_data=self.user_data)
         self.tabs.addTab(self.payment_tab, "💳 Payments")
@@ -123,28 +103,28 @@ class EmployeeDashboard(QWidget):
     def apply_styles(self):
         self.setStyleSheet("""
             QTabWidget::pane {
-                border: 1px solid #bdc3c7;
+                border: 1px solid
                 border-radius: 5px;
                 background-color: white;
             }
             QTabBar::tab {
-                background-color: #ecf0f1;
-                border: 1px solid #bdc3c7;
+                background-color:
+                border: 1px solid
                 padding: 8px 15px;
                 margin-right: 2px;
                 border-top-left-radius: 5px;
                 border-top-right-radius: 5px;
             }
             QTabBar::tab:selected {
-                background-color: #e74c3c;
+                background-color:
                 color: white;
             }
             QTabBar::tab:hover {
-                background-color: #c0392b;
+                background-color:
                 color: white;
             }
             QPushButton {
-                background-color: #e74c3c;
+                background-color:
                 color: white;
                 border: none;
                 border-radius: 5px;
@@ -152,10 +132,10 @@ class EmployeeDashboard(QWidget):
                 font-weight: bold;
             }
             QPushButton:hover {
-                background-color: #c0392b;
+                background-color:
             }
             QPushButton:disabled {
-                background-color: #bdc3c7;
+                background-color:
             }
         """)
 
@@ -171,14 +151,12 @@ class RefundManagementTab(QWidget):
     def init_ui(self):
         layout = QVBoxLayout()
         
-        # Title
         title = QLabel("💸 Refund Request Management")
         title.setFont(QFont("Arial", 16, QFont.Weight.Bold))
         title.setStyleSheet("color: #2c3e50; margin: 10px;")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
         
-        # Status filter
         filter_layout = QHBoxLayout()
         filter_layout.addWidget(QLabel("Filter by status:"))
         
@@ -190,12 +168,10 @@ class RefundManagementTab(QWidget):
         filter_layout.addStretch()
         layout.addLayout(filter_layout)
         
-        # Refunds table
         self.refund_table = QTableWidget()
         self.refund_table.setAlternatingRowColors(True)
         layout.addWidget(self.refund_table)
         
-        # Action buttons
         button_layout = QHBoxLayout()
         
         self.view_btn = QPushButton("👁 View Details")
@@ -241,9 +217,8 @@ class RefundManagementTab(QWidget):
         self.load_refunds(status)
     
     def load_refunds(self, status_filter="all"):
-        refunds = self.db.get_all_refunds()  # Get all refunds to support filtering
+        refunds = self.db.get_all_refunds()
         
-        # Apply additional filtering if needed
         if status_filter != "all":
             refunds = [r for r in refunds if r['status'] == status_filter]
         
@@ -261,7 +236,6 @@ class RefundManagementTab(QWidget):
                 self.refund_table.setItem(row_idx, 3, QTableWidgetItem(str(refund['booking_id'])))
                 self.refund_table.setItem(row_idx, 4, QTableWidgetItem(f"${refund['total_amount']:.2f}"))
                 
-                # Truncate long reasons
                 reason = refund['refund_reason']
                 if len(reason) > 50:
                     reason = reason[:50] + "..."
@@ -278,7 +252,6 @@ class RefundManagementTab(QWidget):
                 
                 self.refund_table.setItem(row_idx, 7, QTableWidgetItem(str(refund['refund_date'])))
             
-            # Resize columns to content
             header = self.refund_table.horizontalHeader()
             header.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         else:
@@ -294,7 +267,6 @@ class RefundManagementTab(QWidget):
         
         refund_id = int(self.refund_table.item(selected_items[0].row(), 0).text())
         
-        # Get detailed refund information
         refunds = self.db.get_pending_refunds()
         refund = next((r for r in refunds if r['refund_id'] == refund_id), None)
         
@@ -306,7 +278,6 @@ class RefundManagementTab(QWidget):
             
             layout = QVBoxLayout(dialog)
             
-            # Refund details
             details = QLabel(
                 f"<h3>Refund Request Details</h3>"
                 f"<b>Customer:</b> {refund['first_name']} {refund['last_name']}<br>"
@@ -331,7 +302,6 @@ class RefundManagementTab(QWidget):
         refund_id = int(self.refund_table.item(selected_items[0].row(), 0).text())
         original_amount = float(self.refund_table.item(selected_items[0].row(), 4).text().replace('$', ''))
         
-        # Get refund amount (could be partial or full)
         amount, ok = QInputDialog.getDouble(
             self, "Refund Amount", 
             f"Enter refund amount (max: ${original_amount:.2f}):", 
@@ -373,14 +343,12 @@ class MovieManagementTab(QWidget):
     def init_ui(self):
         layout = QVBoxLayout()
         
-        # Title
         title = QLabel("🎬 Movie Management")
         title.setFont(QFont("Arial", 16, QFont.Weight.Bold))
         title.setStyleSheet("color: #2c3e50; margin: 10px;")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
         
-        # Search Bar
         search_layout = QHBoxLayout()
         search_layout.addWidget(QLabel("🔍 Search Movies:"))
         
@@ -391,12 +359,10 @@ class MovieManagementTab(QWidget):
         search_layout.addWidget(self.search_input)
         layout.addLayout(search_layout)
         
-        # Movies table
         self.movie_table = QTableWidget()
         self.movie_table.setAlternatingRowColors(True)
         layout.addWidget(self.movie_table)
         
-        # Action buttons
         button_layout = QHBoxLayout()
         
         if self.is_manager:
@@ -425,28 +391,21 @@ class MovieManagementTab(QWidget):
         layout.addLayout(button_layout)
         self.setLayout(layout)
     
-    # paste this inside your MovieManagementTab class
     def show_error_message(self, title: str, message: str):
         """
         Show a critical error message box and also print the error to the terminal for debugging.
         Replace any older implementation with this one.
         """
-        # Print to terminal so you always see the error even if the dialog text is hidden
         print(f"[ERROR] {title}: {message}")
-        # also print a short traceback so we can see where it came from
         traceback.print_stack(limit=5)
 
-        # Show a visible QMessageBox
         msg = QMessageBox(self)
         msg.setWindowTitle(title or "Error")
         msg.setIcon(QMessageBox.Icon.Critical)
 
-        # Ensure main text + informative text are set (some themes hide one or the other)
         msg.setText(message or "An error occurred.")
-        # put extra details in informative text (helps if UI hides main text)
         msg.setInformativeText("See terminal/console for details.")
 
-        # Ensure any odd stylesheet doesn't hide text (safe to include)
         msg.setStyleSheet("")
 
         msg.setStandardButtons(QMessageBox.StandardButton.Ok)
@@ -477,7 +436,6 @@ class MovieManagementTab(QWidget):
                 self.movie_table.setItem(row_idx, 4, QTableWidgetItem(movie['rating']))
                 self.movie_table.setItem(row_idx, 5, QTableWidgetItem(movie['director']))
             
-            # Resize columns to content
             header = self.movie_table.horizontalHeader()
             header.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         else:
@@ -490,15 +448,8 @@ class MovieManagementTab(QWidget):
             QMessageBox.warning(self, "Access Denied", "Only managers can add movies!")
             return
             
-        # 1. Get Title/Genre etc first? 
-        # The 'get_movie_details_dialog' only gets DETAILS (director, cast etc).
-        # We need a basic input dialog for Title, Genre, Duration, Rating first, OR update get_movie_details_dialog to include them.
-        # Looking at movie_tab.py, add_record gets title/genre from the FORM on the page, then asks for details.
         
-        # Since MovieManagementTab doesn't have a form, we need a full input mechanism.
-        # Use a custom dialog or expand get_movie_details_dialog. For now, let's create a simple sequence.
         
-        # 1. Get Basic Info
         title, ok1 = QInputDialog.getText(self, "Add Movie", "Movie Title:")
         if not ok1 or not title: return
         
@@ -511,11 +462,9 @@ class MovieManagementTab(QWidget):
         rating, ok4 = QInputDialog.getItem(self, "Add Movie", "Rating:", ["G", "PG", "PG-13", "R", "NC-17"], 0, False)
         if not ok4: return
         
-        # 2. Get Details
         movie_data = MovieTab.get_movie_details_dialog(self, db=self.db)
         if not movie_data: return
         
-        # 3. Insert into DB
         success = self.db.add_movie(
             title=title,
             genre=genre,
@@ -545,8 +494,6 @@ class MovieManagementTab(QWidget):
             return
         
         movie_id = int(self.movie_table.item(selected_items[0].row(), 0).text())
-        # Call with explicit kwargs to handle the signature (self, parent=None, db=None, movie_id=None)
-        # We pass 'self' as the instance, so 'parent' defaults to None (which falls back to 'self' inside the method)
         movie_data = MovieTab.get_movie_details_dialog(self, db=self.db, movie_id=movie_id)
         
         if movie_data:
@@ -584,7 +531,6 @@ class MovieManagementTab(QWidget):
 
         
         
-        # Check if movie has screenings
         screenings = self.db.get_screenings(movie_id)
         if screenings:
             self.show_error_message("Cannot Delete", f"Movie cannot be deleted because it has {len(screenings)} scheduled screenings.\nPlease remove all screenings for this movie first.")
@@ -594,18 +540,14 @@ class MovieManagementTab(QWidget):
             try:
                 cur = self.db.connection.cursor()
 
-                # 1) Delete Movie_Details (if present)
                 cur.execute("DELETE FROM Movie_Details WHERE movie_id = ?", (movie_id,))
-                details_deleted = cur.rowcount  # number of rows removed from Movie_Details
+                details_deleted = cur.rowcount
 
-                # 2) Delete Movie
                 cur.execute("DELETE FROM Movie WHERE movie_id = ?", (movie_id,))
-                movies_deleted = cur.rowcount  # number of rows removed from Movie
+                movies_deleted = cur.rowcount
 
-                # 3) Commit the transaction
                 self.db.connection.commit()
 
-                # 4) Check results and show clear messages
                 if movies_deleted > 0:
                     self.show_success_message("Success", f"Movie '{movie_title}' deleted successfully! "
                                                          f"({movies_deleted} movie row(s) deleted, "
@@ -613,7 +555,6 @@ class MovieManagementTab(QWidget):
                     self.clear_form()
                     self.load_data()
                 else:
-                    # No movie row deleted — either wrong ID or FK prevented deletion
                     self.show_error_message(
                         "Error",
                         f"No movie was deleted for id={movie_id}. This usually means the movie id was not found "
@@ -621,7 +562,6 @@ class MovieManagementTab(QWidget):
                     )
 
             except Exception as e:
-                # Roll back on error and show the exception so it's visible
                 try:
                     self.db.connection.rollback()
                 except Exception:
@@ -633,7 +573,6 @@ class MovieManagementTab(QWidget):
         text = text.lower()
         for row in range(self.movie_table.rowCount()):
             match = False
-            # Check Title (1), Genre (2), Director (5)
             for col in [1, 2, 5]:
                 item = self.movie_table.item(row, col)
                 if item and text in item.text().lower():

@@ -1,4 +1,3 @@
-# booking_tab.py - INTEGRATED VERSION
 from PyQt6.QtWidgets import QTableWidgetItem, QMessageBox, QDialog, QVBoxLayout, QListWidget, QDialogButtonBox, QLabel, QPushButton
 from PyQt6.QtCore import QDateTime
 from PyQt6.QtCore import Qt
@@ -23,39 +22,23 @@ class BookingTab(BaseTab, Ui_BookingTab):
         self.load_dynamic_data()
         self.load_data()
 
-        # Add buttons dynamically based on user role
-        # Assuming self.buttonLayout is a QLayout in your ui_booking_tab.py
-        # If not, you'll need to create one or find an existing layout to add buttons to.
-        # For this example, let's assume there's a layout named 'buttonLayout'
-        # or we'll add them to the main layout if no specific button layout exists.
         
-        # Find the layout where addBookingBtn, updateBookingBtn, deleteBookingBtn, refreshBookingBtn are located
-        # This is a heuristic, adjust based on your actual UI structure
         button_layout = None
         if hasattr(self, 'addBookingBtn') and self.addBookingBtn.parent():
             button_layout = self.addBookingBtn.parent().layout()
         
         if button_layout:
-            # Clear existing buttons if they are dynamically added, or ensure they are not duplicated
-            # For this change, we'll assume the existing buttons are part of the UI file
-            # and we are adding new ones or replacing logic.
             
-            # If current_customer_id is set, it's a customer view
             if self.current_customer_id:
-                # Hide employee/manager specific buttons if they exist in UI
                 self.updateBookingBtn.hide()
                 self.deleteBookingBtn.hide()
-                # Add a cancel button for customers
                 self.cancel_btn = QPushButton("❌ Cancel Booking")
                 self.cancel_btn.clicked.connect(self.delete_record)
                 button_layout.addWidget(self.cancel_btn)
             else:
-                # Employee/Manager view buttons
-                # Add an approve button for employees/managers
                 self.approve_btn = QPushButton("✅ Approve Booking")
                 self.approve_btn.clicked.connect(self.approve_booking)
                 button_layout.addWidget(self.approve_btn)
-                # Ensure update and delete buttons are visible if they were hidden
                 self.updateBookingBtn.show()
                 self.deleteBookingBtn.show()
                 self.deleteBookingBtn.setText("❌ Cancel Booking")
@@ -70,7 +53,6 @@ class BookingTab(BaseTab, Ui_BookingTab):
         self.refreshBookingBtn.clicked.connect(self.refresh_data)
         self.bookingTable.itemSelectionChanged.connect(self.on_row_selected)
         
-        # Auto-calculate price when screening changes
         self.screeningCombo.currentIndexChanged.connect(self.calculate_price)
     
     def setup_form(self):
@@ -79,7 +61,6 @@ class BookingTab(BaseTab, Ui_BookingTab):
         self.totalAmountInput.setRange(0, 1000)
         self.totalAmountInput.setPrefix("$ ")
         
-        # Hide customer selection if viewing as customer
         if self.current_customer_id:
             self.customerCombo.hide()
             customer_label = self.findChild(QLabel, "customerLabel")  # You might need to add this label
@@ -88,12 +69,10 @@ class BookingTab(BaseTab, Ui_BookingTab):
     
     def load_dynamic_data(self):
         """Load combo box data"""
-        # Load screenings using new database method
         screenings = self.db.get_screenings()
         self.screeningCombo.clear()
         if screenings:
             for screening in screenings:
-                # defensive: provider keys may be missing
                 title = screening.get('title', '')
                 hall = screening.get('hall_name', '')
                 start = screening.get('start_time', '')
@@ -101,10 +80,8 @@ class BookingTab(BaseTab, Ui_BookingTab):
                 display_text = f"{title} - {hall} - {start} - ${price}"
                 self.screeningCombo.addItem(display_text, screening.get('screening_id'))
 
-        # Clear customer combo first
         self.customerCombo.clear()
 
-        # If current_customer_id is None => we are an employee/manager: load all customers
         if self.current_customer_id is None:
             try:
                 cursor = self.db.connection.cursor()
@@ -112,14 +89,12 @@ class BookingTab(BaseTab, Ui_BookingTab):
                 rows = cursor.fetchall()
                 if rows:
                     for r in rows:
-                        # r may be a pyodbc.Row or tuple
                         try:
                             cust_id = getattr(r, 'customer_id', None) or r[0]
                             first = getattr(r, 'first_name', None) or (r[1] if len(r) > 1 else '')
                             last = getattr(r, 'last_name', None) or (r[2] if len(r) > 2 else '')
                             email = getattr(r, 'email', None) or (r[3] if len(r) > 3 else '')
                         except Exception:
-                            # fallback mapping
                             cust_id = r[0] if len(r) > 0 else None
                             first = r[1] if len(r) > 1 else ''
                             last = r[2] if len(r) > 2 else ''
@@ -130,8 +105,6 @@ class BookingTab(BaseTab, Ui_BookingTab):
             except Exception as e:
                 print("DEBUG: load_dynamic_data - failed to load customers:", e)
         else:
-            # For customers (a logged-in customer), pre-select their ID and show name
-            # Use user_data safely (may be None for some flows)
             if isinstance(self.user_data, dict):
                 first = self.user_data.get('first_name', '') or ''
                 last = self.user_data.get('last_name', '') or ''
@@ -160,20 +133,17 @@ class BookingTab(BaseTab, Ui_BookingTab):
     
     def load_data(self):
         """Load booking data into table (safe, tolerant to varying DB column names)."""
-        # Choose source depending on whether a specific customer is active
         if self.current_customer_id:
             bookings = self.db.get_user_bookings(self.current_customer_id)
         else:
             bookings = self.db.get_all_bookings()
 
-        # Clear table if no bookings
         if not bookings:
             self.bookingTable.setRowCount(0)
             self.bookingTable.setColumnCount(1)
             self.bookingTable.setHorizontalHeaderLabels(["No bookings found"])
             return
 
-        # Prepare table
         self.bookingTable.setRowCount(len(bookings))
         self.bookingTable.setColumnCount(7)
         self.bookingTable.setHorizontalHeaderLabels([
@@ -182,7 +152,6 @@ class BookingTab(BaseTab, Ui_BookingTab):
         ])
 
         for row_idx, booking in enumerate(bookings):
-            # safe helpers that accept multiple possible key names
             def pick(*keys, default=""):
                 for k in keys:
                     if k in booking and booking[k] is not None:
@@ -190,9 +159,7 @@ class BookingTab(BaseTab, Ui_BookingTab):
                 return default
 
             booking_id = pick('booking_id', 'id', default='')
-            # Customer name:
             if self.current_customer_id:
-                # Prefer user_data if available, else try booking fields
                 if isinstance(getattr(self, 'user_data', None), dict):
                     first = self.user_data.get('first_name') or ''
                     last = self.user_data.get('last_name') or ''
@@ -205,14 +172,11 @@ class BookingTab(BaseTab, Ui_BookingTab):
                 last  = pick('last_name',  'customer_last_name', default='')
                 customer_name = f"{first} {last}".strip() or "Unknown Customer"
 
-            # Movie title (support 'movie_title' or 'title')
             movie_title = pick('movie_title', 'title', default='Unknown Movie')
 
-            # Times / dates: convert to string safely
             start_time = pick('start_time', 'screening_time', default='')
             booking_date = pick('booking_date', 'date', default='')
 
-            # Amount and status (with defaults)
             total_amount = pick('total_amount', 'total', 'amount', default=0.0)
             try:
                 total_str = f"${float(total_amount):.2f}"
@@ -221,7 +185,6 @@ class BookingTab(BaseTab, Ui_BookingTab):
 
             status = pick('status', default='confirmed')
 
-            # Insert into table (use safe str() conversions)
             self.bookingTable.setItem(row_idx, 0, QTableWidgetItem(str(booking_id)))
             self.bookingTable.setItem(row_idx, 1, QTableWidgetItem(str(customer_name)))
             self.bookingTable.setItem(row_idx, 2, QTableWidgetItem(str(movie_title)))
@@ -229,16 +192,13 @@ class BookingTab(BaseTab, Ui_BookingTab):
             self.bookingTable.setItem(row_idx, 4, QTableWidgetItem(str(booking_date)))
             self.bookingTable.setItem(row_idx, 5, QTableWidgetItem(total_str))
 
-            # Status with coloring helper
             status_item = QTableWidgetItem(str(status))
             try:
                 self.color_status_item(status_item, status)
             except Exception as e:
-                # If color helper fails, still set the item
                 print("DEBUG: color_status_item failed:", e)
             self.bookingTable.setItem(row_idx, 6, status_item)
 
-        # Optional: auto-resize columns for readability
         try:
             self.bookingTable.resizeColumnsToContents()
         except Exception:
@@ -258,7 +218,6 @@ class BookingTab(BaseTab, Ui_BookingTab):
                 self.show_error_message("Error", "Customer and Screening are required!")
                 return
             
-            # Get ALL seats with status for the screening
             print("DEBUG: fetching screening seats...")
             screening_seats = self.db.get_screening_seat_status(screening_id)
             print(f"DEBUG: fetched {len(screening_seats) if screening_seats else 'None'} seats")
@@ -267,7 +226,6 @@ class BookingTab(BaseTab, Ui_BookingTab):
                 self.show_error_message("Error", "Could not fetch seat information! (Check Database/Logs)")
                 return
                 
-            # Check if there are ANY available seats
             available_count = sum(1 for s in screening_seats if s['status'] == 'available')
             print(f"DEBUG: available_count={available_count}")
             
@@ -275,9 +233,7 @@ class BookingTab(BaseTab, Ui_BookingTab):
                 self.show_error_message("Sold Out", "No available seats for this screening!")
                 return
             
-            # Show seat selection dialog
             print("DEBUG: showing SeatSelectionDialog")
-            # Import locally to avoid circular imports if any, or move to top
             from seat_selection_dialog import SeatSelectionDialog
             
             dialog = SeatSelectionDialog(screening_seats, parent=self)
@@ -289,9 +245,8 @@ class BookingTab(BaseTab, Ui_BookingTab):
             print(f"DEBUG: selected seat_ids={seat_ids}")
             
             if not seat_ids:
-                return  # User cancelled
+                return
 
-            # Calculate total amount based on number of seats
             ticket_price = 0.0
             screenings = self.db.get_screenings()
             for s in screenings:
@@ -302,20 +257,16 @@ class BookingTab(BaseTab, Ui_BookingTab):
             total_amount = ticket_price * len(seat_ids)
             self.totalAmountInput.setValue(total_amount)
 
-            # Show Payment Screen
             from payment_dialog import PaymentDialog
             payment_dialog = PaymentDialog(total_amount, parent=self)
             if payment_dialog.exec() != QDialog.DialogCode.Accepted:
-                return # User cancelled payment
+                return
 
             method = payment_dialog.get_payment_method()
             
-            # Determine Status and Payment Status
-            # Default: Online Customer -> Pending Approval (Paid, needs verify)
             status = 'confirmed'
             payment_status = 'completed'
             
-            # Create booking
             booking_id = self.db.create_booking(
                 customer_id, 
                 screening_id, 
@@ -331,7 +282,6 @@ class BookingTab(BaseTab, Ui_BookingTab):
                 self.show_success_message("Booking Successful", msg)
                 self.clear_form()
                 self.load_data()
-                # Refresh screening data to update remaining seats
                 self.load_dynamic_data()
             else:
                 self.show_error_message("Error", "Failed to create booking! (DB Error)")
@@ -350,11 +300,10 @@ class BookingTab(BaseTab, Ui_BookingTab):
         
         main_layout = QVBoxLayout(dialog)
         
-        # Screen visual
         screen_label = QLabel("SCREEN")
         screen_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         screen_label.setStyleSheet("""
-            background-color: #34495e; 
+            background-color:
             color: white; 
             font-weight: bold; 
             border-radius: 5px; 
@@ -364,7 +313,6 @@ class BookingTab(BaseTab, Ui_BookingTab):
         """)
         main_layout.addWidget(screen_label)
         
-        # Instructions
     def update_record(self):
         """Update existing booking"""
         selected_items = self.bookingTable.selectedItems()
@@ -406,13 +354,11 @@ class BookingTab(BaseTab, Ui_BookingTab):
         booking_status = self.bookingTable.item(selected_items[0].row(), 6).text() if self.bookingTable.columnCount() > 6 else "confirmed"
         
         if self.current_customer_id:
-            # Customers request refunds instead of deleting
             if booking_status == 'confirmed':
                 self.request_refund(int(booking_id))
             else:
                 self.show_warning_message("Cannot Refund", "Only confirmed bookings can be refunded!")
         else:
-            # Employees/managers can delete bookings
             if self.confirm_action("Confirm Cancel", "Are you sure you want to cancel this booking?"):
                 query = "UPDATE Booking SET status = 'cancelled' WHERE booking_id = ?"
                 success, result, error = self.execute_query(query, (booking_id,))
@@ -479,7 +425,6 @@ class BookingTab(BaseTab, Ui_BookingTab):
         if selected_items:
             row = selected_items[0].row()
             
-            # Set screening
             movie_title = self.bookingTable.item(row, 2).text()
             screening_time = self.bookingTable.item(row, 3).text()
             screening_text = f"{movie_title} - {screening_time}"
@@ -488,14 +433,12 @@ class BookingTab(BaseTab, Ui_BookingTab):
             if index >= 0:
                 self.screeningCombo.setCurrentIndex(index)
             
-            # Set customer (if not customer view)
             if not self.current_customer_id and self.bookingTable.columnCount() > 1:
                 customer_name = self.bookingTable.item(row, 1).text()
                 index = self.customerCombo.findText(customer_name, Qt.MatchFlag.MatchContains)
                 if index >= 0:
                     self.customerCombo.setCurrentIndex(index)
             
-            # Set amount
             if self.bookingTable.columnCount() > 5:
                 amount_text = self.bookingTable.item(row, 5).text()
                 if amount_text.startswith('$'):
