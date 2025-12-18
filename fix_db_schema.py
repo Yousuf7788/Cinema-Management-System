@@ -48,6 +48,33 @@ def fix_schema():
             except Exception as e:
                 print(f"Could not add constraint: {e}")
 
+        # --- NEW: Update Default Value ---
+        print("Finding default constraint for status...")
+        cursor.execute("""
+            SELECT name 
+            FROM sys.default_constraints 
+            WHERE parent_object_id = OBJECT_ID('Booking') 
+            AND parent_column_id = (
+                SELECT column_id 
+                FROM sys.columns 
+                WHERE object_id = OBJECT_ID('Booking') AND name = 'status'
+            )
+        """)
+        row = cursor.fetchone()
+        
+        if row:
+            default_constraint = row[0]
+            print(f"Found default constraint: {default_constraint}")
+            print("Dropping old default...")
+            cursor.execute(f"ALTER TABLE Booking DROP CONSTRAINT {default_constraint}")
+            db.connection.commit()
+        
+        print("Adding new default 'pending'...")
+        cursor.execute("ALTER TABLE Booking ADD DEFAULT 'pending' FOR status")
+        db.connection.commit()
+        print("Default value updated to 'pending'.")
+
+
     except Exception as e:
         print(f"Error updating schema: {e}")
         db.connection.rollback()

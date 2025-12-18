@@ -247,8 +247,8 @@ class PaymentTab(BaseTab, Ui_PaymentTab):
             
             # Update booking status if payment is completed
             if payment_status == 'completed':
-                # Move to 'pending_approval' instead of 'confirmed'
-                update_booking_query = "UPDATE Booking SET status = 'pending_approval' WHERE booking_id = ?"
+                # Move to 'pending' instead of 'confirmed'
+                update_booking_query = "UPDATE Booking SET status = 'pending' WHERE booking_id = ?"
                 self.execute_query(update_booking_query, (booking_id,))
             
             self.clear_form()

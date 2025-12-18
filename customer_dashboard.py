@@ -396,61 +396,46 @@ class MoviesTab(QWidget):
             QMessageBox.warning(self, "Sold Out", "No available seats for this screening!")
             return
         
-        # Simple seat selection (in real app, show a visual seat map)
-        seat_list = [f"Row {seat['row_letter']} - Seat {seat['seat_number']} ({seat['seat_type']})" 
-                    for seat in available_seats[:5]]  # Show first 5 seats for simplicity
+        # Show shared seat selection dialog
+        from seat_selection_dialog import SeatSelectionDialog
+        dialog = SeatSelectionDialog(available_seats, parent=self)
         
-        seat, ok = QInputDialog.getItem(self, "Select Seat", "Choose a seat:", seat_list, 0, False)
-        
-        if ok and seat:
-            # Find the seat ID
-            seat_info = seat.split(" - ")
-            row = seat_info[0].replace("Row ", "")
-            import re
-            m = re.search(r'\d+', seat_info[1] or "")
-            if not m:
-                self.show_error_message("Error", f"Could not parse seat number from '{seat_info[1]}'")
-                return
-            number = int(m.group())
-
+        selected_seat_ids = []
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            selected_seat_ids = dialog.get_selected_seats()
             
-            seat_id = None
-            for available_seat in available_seats:
-                if available_seat['row_letter'] == row and available_seat['seat_number'] == number:
-                    seat_id = available_seat['seat_id']
-                    break
+        if selected_seat_ids:
+            # Calculate total amount
+            seat_ids = list(selected_seat_ids)
+            total_amount = float(screening['ticket_price']) * len(seat_ids)
+            # Show Payment Screen
+            from payment_dialog import PaymentDialog
+            payment_dialog = PaymentDialog(total_amount, parent=self)
+            if payment_dialog.exec() != QDialog.DialogCode.Accepted:
+                return # User cancelled payment
+
+            method = payment_dialog.get_payment_method()
+
+            # Create booking with pending status
+            booking_id = self.db.create_booking(
+                self.customer_id, 
+                screening['screening_id'], 
+                seat_ids, 
+                total_amount,
+                status='pending',
+                payment_method=method,
+                payment_status='pending'
+            )
             
-            if seat_id:
-                # Show Payment Screen
-                from payment_dialog import PaymentDialog
-                # Assuming ticket_price is convertible to float
-                total_amount = float(screening['ticket_price'])
-                payment_dialog = PaymentDialog(total_amount, parent=self)
-                if payment_dialog.exec() != QDialog.DialogCode.Accepted:
-                    return # User cancelled payment
-
-                method = payment_dialog.get_payment_method()
-
-                # Create booking with pending status
-                booking_id = self.db.create_booking(
-                    self.customer_id, 
-                    screening['screening_id'], 
-                    [seat_id], 
-                    total_amount,
-                    status='pending_approval',
-                    payment_method=method,
-                    payment_status='pending'
-                )
-                
-                if booking_id:
-                    QMessageBox.information(self, "Payment Recorded", 
-                                          f"🎉 Payment recorded!\n"
-                                          f"Booking ID: {booking_id}\n"
-                                          f"Status: Pending Approval\n"
-                                          f"Please wait for an employee to confirm your booking.")
-                    self.load_movies()  # Refresh available movies
-                else:
-                    QMessageBox.critical(self, "Booking Failed", "Failed to create booking. Please try again.")
+            if booking_id:
+                QMessageBox.information(self, "Payment Recorded", 
+                                      f"🎉 Payment recorded!\n"
+                                      f"Booking ID: {booking_id}\n"
+                                      f"Status: Pending Approval\n"
+                                      f"Please wait for an employee to confirm your booking.")
+                self.load_movies()  # Refresh available movies
+            else:
+                QMessageBox.critical(self, "Booking Failed", "Failed to create booking. Please try again.")
 
 class MyBookingsTab(QWidget):
     def __init__(self, db, customer_id):

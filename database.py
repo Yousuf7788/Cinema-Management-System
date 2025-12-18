@@ -276,7 +276,7 @@ class Database:
                     s.seat_number, 
                     s.seat_type,
                     CASE 
-                        WHEN bs.seat_id IS NOT NULL THEN 'booked'
+                        WHEN booking_check.seat_id IS NOT NULL THEN 'booked'
                         ELSE 'available'
                     END as status
                 FROM Seat s
@@ -286,7 +286,7 @@ class Database:
                     FROM Booking_Seat bs
                     JOIN Booking b ON bs.booking_id = b.booking_id
                     WHERE b.screening_id = ? 
-                    AND b.status IN ('confirmed', 'pending_refund', 'pending_approval')
+                    AND b.status IN ('confirmed', 'pending_refund')
                 ) booking_check ON s.seat_id = booking_check.seat_id
                 WHERE sc.screening_id = ?
                 ORDER BY s.row_letter, CAST(s.seat_number AS INT)
@@ -303,15 +303,15 @@ class Database:
         try:
             cursor = self.connection.cursor()
             
-            # Start transaction
-            cursor.execute("BEGIN TRANSACTION")
+            # Start transaction (Implicitly managed by pyodbc with autocommit=False)
+            # cursor.execute("BEGIN TRANSACTION") - REMOVED: caused nested transaction issues
             
             # 1. Create Booking
             cursor.execute("""
-                INSERT INTO Booking (customer_id, screening_id, booking_date, total_amount, status)
+                INSERT INTO Booking (customer_id, screening_id, total_amount)
                 OUTPUT INSERTED.booking_id
-                VALUES (?, ?, GETDATE(), ?, ?)
-            """, (customer_id, screening_id, total_amount, status))
+                VALUES (?, ?, ?)
+            """, (customer_id, screening_id, total_amount))
             
             booking_id = cursor.fetchone()[0]
             

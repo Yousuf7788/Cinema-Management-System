@@ -58,6 +58,7 @@ class BookingTab(BaseTab, Ui_BookingTab):
                 # Ensure update and delete buttons are visible if they were hidden
                 self.updateBookingBtn.show()
                 self.deleteBookingBtn.show()
+                self.deleteBookingBtn.setText("❌ Cancel Booking")
         else:
             print("Warning: Could not find a layout to add dynamic buttons to.")
     
@@ -275,8 +276,16 @@ class BookingTab(BaseTab, Ui_BookingTab):
                 return
             
             # Show seat selection dialog
-            print("DEBUG: showing select_seats_dialog")
-            seat_ids = self.select_seats_dialog(screening_seats)
+            print("DEBUG: showing SeatSelectionDialog")
+            # Import locally to avoid circular imports if any, or move to top
+            from seat_selection_dialog import SeatSelectionDialog
+            
+            dialog = SeatSelectionDialog(screening_seats, parent=self)
+            if dialog.exec() == QDialog.DialogCode.Accepted:
+                seat_ids = dialog.get_selected_seats()
+            else:
+                seat_ids = []
+                
             print(f"DEBUG: selected seat_ids={seat_ids}")
             
             if not seat_ids:
@@ -303,17 +312,8 @@ class BookingTab(BaseTab, Ui_BookingTab):
             
             # Determine Status and Payment Status
             # Default: Online Customer -> Pending Approval (Paid, needs verify)
-            status = 'pending_approval'
-            payment_status = 'completed' # PaymentDialog implies success
-            
-            # Logic:
-            # 1. If currently logged in as Employee (current_customer_id is None), they are at POS -> Confirmed immediately.
-            # 2. If Payment Method is 'Cash', it implies physical presence -> Confirmed immediately.
-            
-            is_employee = self.current_customer_id is None
-            if is_employee or method == 'Cash':
-                status = 'confirmed'
-                payment_status = 'completed'
+            status = 'confirmed'
+            payment_status = 'completed'
             
             # Create booking
             booking_id = self.db.create_booking(
@@ -365,140 +365,6 @@ class BookingTab(BaseTab, Ui_BookingTab):
         main_layout.addWidget(screen_label)
         
         # Instructions
-        instr = QLabel("Select one or more seats. Grey seats are already booked.")
-        instr.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        main_layout.addWidget(instr)
-
-        # Scroll area for seats
-        from PyQt6.QtWidgets import QScrollArea, QGridLayout, QWidget, QPushButton, QHBoxLayout, QFrame
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setStyleSheet("QScrollArea { border: none; background-color: #f0f0f0; }")
-        
-        scroll_content = QWidget()
-        scroll_content.setStyleSheet("background-color: transparent;")
-        grid_layout = QGridLayout(scroll_content)
-        grid_layout.setSpacing(8)
-        grid_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        
-        # Organize seats by row
-        rows = {}
-        for seat in all_seats:
-            r = seat['row_letter']
-            if r not in rows:
-                rows[r] = []
-            rows[r].append(seat)
-            
-        self.selected_seats = set()
-        
-        sorted_keys = sorted(rows.keys())
-        for row_idx, row_curr in enumerate(sorted_keys):
-            row_seats = sorted(rows[row_curr], key=lambda x: int(x['seat_number']))
-            
-            # Row Label (Left)
-            lbl_left = QLabel(row_curr)
-            lbl_left.setStyleSheet("font-weight: bold; color: #7f8c8d;")
-            grid_layout.addWidget(lbl_left, row_idx, 0, Qt.AlignmentFlag.AlignRight)
-            
-            for seat in row_seats:
-                seat_num = int(seat['seat_number'])
-                # Use seat_number for column index to preserver gaps if any
-                col_idx = seat_num 
-                
-                btn = QPushButton(str(seat_num))
-                btn.setFixedSize(35, 35)
-                
-                is_booked = seat['status'] == 'booked'
-                
-                # Store data
-                btn.setProperty('seat_id', seat['seat_id'])
-                
-                if is_booked:
-                    btn.setEnabled(False)
-                    btn.setStyleSheet("""
-                        QPushButton {
-                            background-color: #bdc3c7;
-                            color: #7f8c8d;
-                            border: 1px solid #95a5a6;
-                            border-radius: 6px;
-                        }
-                    """)
-                else:
-                    btn.setCheckable(True)
-                    btn.setCursor(Qt.CursorShape.PointingHandCursor)
-                    # Green for available
-                    btn.setStyleSheet("""
-                        QPushButton {
-                            background-color: #2ecc71; 
-                            color: white; 
-                            border: 1px solid #27ae60;
-                            border-radius: 6px;
-                            font-weight: bold;
-                        }
-                        QPushButton:checked {
-                            background-color: #e74c3c;
-                            border: 1px solid #c0392b;
-                        }
-                        QPushButton:hover:!checked {
-                            background-color: #27ae60;
-                        }
-                    """)
-                    
-                    def on_click(checked, s_id=seat['seat_id'], b=btn):
-                        if checked:
-                            self.selected_seats.add(s_id)
-                        else:
-                            if s_id in self.selected_seats:
-                                self.selected_seats.remove(s_id)
-                            
-                    btn.clicked.connect(on_click)
-                
-                grid_layout.addWidget(btn, row_idx, col_idx)
-                
-            # Row Label (Right)
-            lbl_right = QLabel(row_curr)
-            lbl_right.setStyleSheet("font-weight: bold; color: #7f8c8d;")
-            # grid_layout.addWidget(lbl_right, row_idx, max_col + 1, Qt.AlignmentFlag.AlignLeft) # optional
-
-        scroll.setWidget(scroll_content)
-        main_layout.addWidget(scroll)
-        
-        # Legend
-        legend_frame = QFrame()
-        legend_layout = QHBoxLayout(legend_frame)
-        
-        def add_legend_item(color, text):
-            item = QHBoxLayout()
-            box = QLabel()
-            box.setFixedSize(15, 15)
-            box.setStyleSheet(f"background-color: {color}; border-radius: 3px;")
-            label = QLabel(text)
-            item.addWidget(box)
-            item.addWidget(label)
-            item.addSpacing(15)
-            legend_layout.addLayout(item)
-            
-        add_legend_item("#2ecc71", "Available")
-        add_legend_item("#e74c3c", "Selected")
-        add_legend_item("#bdc3c7", "Booked")
-        legend_layout.addStretch()
-        
-        main_layout.addWidget(legend_frame)
-        
-        # Buttons
-        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
-        button_box.accepted.connect(dialog.accept)
-        button_box.rejected.connect(dialog.reject)
-        main_layout.addWidget(button_box)
-        
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            if not self.selected_seats:
-                 QMessageBox.warning(self, "No Seats", "Please select at least one seat!")
-                 return None
-            return list(self.selected_seats)
-        
-        return None
-    
     def update_record(self):
         """Update existing booking"""
         selected_items = self.bookingTable.selectedItems()
@@ -547,11 +413,11 @@ class BookingTab(BaseTab, Ui_BookingTab):
                 self.show_warning_message("Cannot Refund", "Only confirmed bookings can be refunded!")
         else:
             # Employees/managers can delete bookings
-            if self.confirm_action("Confirm Delete", "Are you sure you want to delete this booking?"):
-                query = "DELETE FROM Booking WHERE booking_id = ?"
+            if self.confirm_action("Confirm Cancel", "Are you sure you want to cancel this booking?"):
+                query = "UPDATE Booking SET status = 'cancelled' WHERE booking_id = ?"
                 success, result, error = self.execute_query(query, (booking_id,))
                 if success:
-                    self.show_success_message("Success", "Booking deleted successfully!")
+                    self.show_success_message("Success", "Booking cancelled successfully!")
                     self.clear_form()
                     self.load_data()
                 else:
